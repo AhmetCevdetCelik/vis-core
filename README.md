@@ -1,5 +1,10 @@
 # VIS Core
 
+[![CI](https://github.com/AhmetCevdetCelik/vis-core/actions/workflows/ci.yml/badge.svg)](https://github.com/AhmetCevdetCelik/vis-core/actions/workflows/ci.yml)
+![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
+![Platform](https://img.shields.io/badge/platform-Linux%20x86__64-blue.svg)
+![Status](https://img.shields.io/badge/status-public%20core-lightgrey.svg)
+
 VIS Core is the public open-core evidence toolkit for VIS.
 
 It focuses on the parts that are useful for trust, inspection, and community
@@ -16,6 +21,26 @@ program faster. Its purpose is narrower:
 
 > Critical software should not run on hardware blindly. It should run with
 > measured, explainable, and repeatable runtime evidence.
+
+## Try This First
+
+```bash
+git clone https://github.com/AhmetCevdetCelik/vis-core.git
+cd vis-core
+sudo apt install build-essential libnuma-dev
+
+cd vis-jitter
+make
+make test
+
+./vis-doctor \
+  --inspect \
+  --output doctor-inspect.json \
+  --llm doctor-inspect.md \
+  --cpu-policy-output vis-cpu-policy.json
+
+./vis-report-validate doctor-inspect.json
+```
 
 ## What Is Included
 
@@ -38,20 +63,40 @@ Public docs:
 - [Community testing](docs/community-testing.md)
 - [Sharing guide](docs/share.md)
 
-## What Is Not Included
+## VIS Core vs VIS Pro
 
-Commercial/private VIS workflow code is not part of VIS Core:
+| VIS Core | VIS Pro |
+|---|---|
+| `vis-jitter` CPU jitter measurement | `vis-audit` one-command workload audit |
+| `vis-doctor` host diagnostics | Profile store and drift workflows |
+| Report validation/redaction/bundling | CPU/Mem workload policy comparison |
+| Public claim-boundary docs | Inference advisor and pilot reports |
+| Community scan and sharing docs | Customer pilot playbooks and case studies |
+| MIT open-source core | Private commercial suite |
 
-- one-command generic audit orchestration
-- profile store and drift workflows
-- advanced inference/profile advisor workflows
-- advanced gate policies
-- customer pilot playbooks and case-study packages
-- future dashboard/API/agent work
+Commercial/private VIS workflow code is not part of VIS Core. That includes
+generic audit orchestration, profile stores, advanced inference/profile advisor
+workflows, advanced gate policies, customer pilot packages, and future
+dashboard/API/agent work.
 
 Those belong to the private VIS Pro line.
 
-## Build
+## Prerequisites
+
+Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install build-essential libnuma-dev
+```
+
+Optional developer tools:
+
+```bash
+sudo apt install clang-format cppcheck
+```
+
+## Build And Test
 
 ```bash
 cd vis-jitter
@@ -71,7 +116,7 @@ sudo ./vis-doctor --scan --duration 30 --threshold 100 \
   --cpu-policy-output vis-cpu-policy.json
 ```
 
-## Quick Smoke
+## Report Bundle Smoke
 
 ```bash
 cd vis-jitter
