@@ -1,0 +1,123 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Linker files
+*.ilk
+
+# Debugger Files
+*.pdb
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+*.so.*
+
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Repo-local generated binaries
+/vis-jitter/vis-jitter
+/vis-jitter/vis-doctor
+/vis-jitter/vis-run
+/vis-jitter/vis-compare
+/vis-jitter/vis-mem-probe
+/vis-jitter/vis-mem-compare
+/vis-jitter/vis-mem-run
+/vis-jitter/vis-mem-compare-run
+/vis-jitter/vis-report-validate
+/vis-jitter/vis-report-redact
+/vis-jitter/vis-report-bundle
+/vis-jitter/vis-report-summary
+/vis-jitter/vis-gate
+/vis-jitter/vis-infer-llama
+/vis-jitter/test_histogram
+/vis-jitter/test_report_json
+/vis-jitter/test_report_validator
+/vis-jitter/test_report_redactor
+/vis-jitter/test_report_bundle
+/vis-jitter/test_report_summary
+/vis-jitter/test_vis_gate
+/vis-jitter/test_vis_infer_llama
+/vis-jitter/test_public_api
+/vis-jitter/test_doctor
+/vis-jitter/test_vis_run
+/vis-jitter/test_vis_compare
+/vis-jitter/test_vis_mem_probe
+/vis-jitter/test_vis_mem_compare
+/vis-jitter/test_vis_mem_run
+/vis-jitter/test_vis_mem_compare_run
+/vis-jitter/test_smi_audit
+
+# Build directories
+build/
+Build/
+build-*/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*.swp
+
+# vcpkg
+vcpkg_installed/
+
+# debug information files
+*.dwo
+
+# test output & cache
+Testing/
+.cache/
+
+# vis-jitter generated reports
+/vis-jitter/report*.json
+/vis-jitter/*core*.json
+/vis-jitter/reports/
+/vis-jitter/doctor*.json
+/vis-jitter/doctor*.md
+/vis-jitter/*summary*.md
+/vis-jitter/run-attestation*.json
+/vis-jitter/compare*.json
+/vis-jitter/compare*.md
+/vis-jitter/*bundle*/
+/vis-jitter/mem-*.json
+/vis-jitter/mem-*.md
+/vis-jitter/mem-probe*.json
+/vis-jitter/gate*.json
+/vis-jitter/gate*.md
+/vis-jitter/infer*.json
+/vis-jitter/infer*.md
+/vis-jitter/llama*.json
+/vis-jitter/llama*.md
+/vis-jitter/vis-compare-runs/

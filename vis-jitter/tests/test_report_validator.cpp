@@ -1,0 +1,270 @@
+/**
+ * test_report_validator.cpp
+ *
+ * Rootless tests for VIS report metadata validation.
+ *
+ * License: MIT
+ */
+
+#include "../include/report_validator.hpp"
+
+#include <cstdio>
+#include <fstream>
+#include <string>
+
+int main() {
+    const std::string valid =
+        "{\n"
+        "  \"vis_mem_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-mem-probe 0.1.0\"\n"
+        "  }\n"
+        "}\n";
+
+    vis_report_validation_result_t result;
+    if (!vis_report_validate_json(valid, &result) ||
+        !result.valid ||
+        result.report_type != "vis_mem_probe_report" ||
+        result.schema_version != "0.1" ||
+        result.generator != "vis-mem-probe 0.1.0") {
+        std::fprintf(stderr, "[test] valid report was rejected\n");
+        return 1;
+    }
+
+    const std::string old_core =
+        "{\n"
+        "  \"vis_report\": {\n"
+        "    \"schema_version\": \"1.0\",\n"
+        "    \"generator\": \"vis-jitter 1.0.0\"\n"
+        "  }\n"
+        "}\n";
+    if (!vis_report_validate_json(old_core, &result) ||
+        result.report_type != "vis_report" ||
+        result.schema_version != "1.0") {
+        std::fprintf(stderr, "[test] core report schema was rejected\n");
+        return 1;
+    }
+
+    const std::string infer =
+        "{\n"
+        "  \"vis_infer_llama_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-infer-llama 0.1.0\"\n"
+        "  }\n"
+        "}\n";
+    if (!vis_report_validate_json(infer, &result) ||
+        result.report_type != "vis_infer_llama_report") {
+        std::fprintf(stderr, "[test] VIS-Infer report was rejected\n");
+        return 1;
+    }
+
+    const std::string run_with_nested_policy =
+        "{\n"
+        "  \"vis_run_attestation\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-run 0.1.0\",\n"
+        "    \"vis_cpu_policy_bundle\": {\n"
+        "      \"schema_version\": \"0.1\",\n"
+        "      \"generator\": \"vis-doctor 0.1.0\",\n"
+        "      \"evidence_level\": \"advisory\"\n"
+        "    }\n"
+        "  }\n"
+        "}\n";
+    if (!vis_report_validate_json(run_with_nested_policy, &result) ||
+        result.report_type != "vis_run_attestation") {
+        std::fprintf(stderr,
+                     "[test] nested policy bundle was counted as a root\n");
+        return 1;
+    }
+
+    const std::string cpu_policy =
+        "{\n"
+        "  \"vis_cpu_policy_bundle\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-doctor 0.1.0\",\n"
+        "    \"evidence_level\": \"advisory\",\n"
+        "    \"control_level\": \"advisory\",\n"
+        "    \"production_controlled\": false,\n"
+        "    \"attested\": false,\n"
+        "    \"confidence\": \"medium\",\n"
+        "    \"online_cpus\": [0, 1],\n"
+        "    \"recommended_thread_counts\": [1, 2],\n"
+        "    \"recommended_cpu_sets\": [\n"
+        "      {\"name\": \"primary\", \"cpus\": [0, 1]}\n"
+        "    ],\n"
+        "    \"excluded_cpus\": [],\n"
+        "    \"cpu_topology\": []\n"
+        "  }\n"
+        "}\n";
+    if (!vis_report_validate_json(cpu_policy, &result) ||
+        result.report_type != "vis_cpu_policy_bundle" ||
+        result.evidence_level != "advisory" ||
+        result.control_level != "advisory" ||
+        result.warnings.empty()) {
+        std::fprintf(stderr, "[test] CPU policy bundle was rejected\n");
+        return 1;
+    }
+
+    if (!vis_policy_evidence_level_is_valid("advisory") ||
+        !vis_policy_evidence_level_is_valid("attested") ||
+        !vis_policy_evidence_level_is_valid("production_controlled") ||
+        vis_policy_evidence_level_is_valid("strong") ||
+        vis_policy_evidence_level_semantics("attested").find("/proc") ==
+            std::string::npos) {
+        std::fprintf(stderr, "[test] policy evidence semantics are wrong\n");
+        return 1;
+    }
+
+    const std::string mem_policy =
+        "{\n"
+        "  \"vis_mem_policy_bundle\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-mem 0.1.0\",\n"
+        "    \"evidence_level\": \"attested\",\n"
+        "    \"control_level\": \"attested\",\n"
+        "    \"production_controlled\": false,\n"
+        "    \"attested\": true,\n"
+        "    \"confidence\": \"medium\",\n"
+        "    \"verification_confidence\": \"medium\",\n"
+        "    \"recommended_memory_policies\": [\"pretouch\"],\n"
+        "    \"unsupported_policies\": []\n"
+        "  }\n"
+        "}\n";
+    if (!vis_report_validate_json(mem_policy, &result) ||
+        result.report_type != "vis_mem_policy_bundle" ||
+        result.evidence_level != "attested") {
+        std::fprintf(stderr, "[test] Mem policy bundle was rejected\n");
+        return 1;
+    }
+
+    const std::string production_policy =
+        "{\n"
+        "  \"vis_cpu_policy_bundle\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-cpu 0.1.0\",\n"
+        "    \"evidence_level\": \"production_controlled\",\n"
+        "    \"control_level\": \"production_controlled\",\n"
+        "    \"production_controlled\": true,\n"
+        "    \"attested\": true,\n"
+        "    \"confidence\": \"high\",\n"
+        "    \"online_cpus\": [0, 1],\n"
+        "    \"recommended_thread_counts\": [2],\n"
+        "    \"recommended_cpu_sets\": [\n"
+        "      {\"name\": \"primary\", \"cpus\": [0, 1]}\n"
+        "    ],\n"
+        "    \"excluded_cpus\": [],\n"
+        "    \"cpu_topology\": []\n"
+        "  }\n"
+        "}\n";
+    if (!vis_report_validate_json(production_policy, &result) ||
+        result.evidence_level != "production_controlled") {
+        std::fprintf(stderr,
+                     "[test] production-controlled policy was rejected\n");
+        return 1;
+    }
+
+    const std::string invalid_level =
+        "{\n"
+        "  \"vis_cpu_policy_bundle\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-doctor 0.1.0\",\n"
+        "    \"evidence_level\": \"strong\",\n"
+        "    \"control_level\": \"advisory\",\n"
+        "    \"confidence\": \"medium\",\n"
+        "    \"online_cpus\": [0],\n"
+        "    \"recommended_thread_counts\": [1],\n"
+        "    \"recommended_cpu_sets\": [],\n"
+        "    \"excluded_cpus\": [],\n"
+        "    \"cpu_topology\": []\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(invalid_level, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] invalid policy level was accepted\n");
+        return 1;
+    }
+
+    const std::string missing_policy_fields =
+        "{\n"
+        "  \"vis_cpu_policy_bundle\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-doctor 0.1.0\",\n"
+        "    \"evidence_level\": \"advisory\",\n"
+        "    \"control_level\": \"advisory\",\n"
+        "    \"confidence\": \"medium\"\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(missing_policy_fields, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] incomplete policy bundle was accepted\n");
+        return 1;
+    }
+
+    const std::string overclaiming_policy =
+        "{\n"
+        "  \"vis_cpu_policy_bundle\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-doctor 0.1.0\",\n"
+        "    \"evidence_level\": \"advisory\",\n"
+        "    \"control_level\": \"advisory\",\n"
+        "    \"production_controlled\": true,\n"
+        "    \"attested\": false,\n"
+        "    \"confidence\": \"medium\",\n"
+        "    \"online_cpus\": [0],\n"
+        "    \"recommended_thread_counts\": [1],\n"
+        "    \"recommended_cpu_sets\": [],\n"
+        "    \"excluded_cpus\": [],\n"
+        "    \"cpu_topology\": []\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(overclaiming_policy, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] overclaiming advisory policy was accepted\n");
+        return 1;
+    }
+
+    const std::string missing_schema =
+        "{\n"
+        "  \"vis_mem_probe_report\": {\n"
+        "    \"generator\": \"vis-mem-probe 0.1.0\"\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(missing_schema, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] missing schema was accepted\n");
+        return 1;
+    }
+
+    const std::string wrong_schema =
+        "{\n"
+        "  \"vis_mem_probe_report\": {\n"
+        "    \"schema_version\": \"9.9\",\n"
+        "    \"generator\": \"vis-mem-probe 0.1.0\"\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(wrong_schema, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] unsupported schema was accepted\n");
+        return 1;
+    }
+
+    const char* path = "/tmp/vis_report_validator_test.json";
+    {
+        std::ofstream out(path);
+        out << valid;
+    }
+
+    std::string error;
+    if (!vis_report_validate_file(path, &result, &error) ||
+        !error.empty() ||
+        !result.valid) {
+        std::fprintf(stderr, "[test] valid report file was rejected: %s\n",
+                     error.c_str());
+        return 1;
+    }
+
+    std::printf("[test] PASS: VIS Report Validator works.\n");
+    return 0;
+}
