@@ -61,6 +61,17 @@ int main(int argc, char** argv) {
                 : vis_policy_evidence_level_semantics(result.evidence_level);
         std::printf("Evidence meaning: %s\n", evidence_meaning.c_str());
     }
+    if (!result.timer_evidence_level.empty()) {
+        std::printf("Timer evidence: %s\n",
+                    result.timer_evidence_level.c_str());
+    }
+    if (!result.execution_evidence_level.empty()) {
+        std::printf("Execution evidence: %s\n",
+                    result.execution_evidence_level.c_str());
+    }
+    if (!result.backend_status.empty()) {
+        std::printf("Backend status: %s\n", result.backend_status.c_str());
+    }
     if (!result.control_level.empty()) {
         std::printf("Control level: %s\n", result.control_level.c_str());
     }

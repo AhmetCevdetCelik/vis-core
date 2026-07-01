@@ -17,6 +17,9 @@ struct vis_report_validation_result_t {
     std::string schema_version;
     std::string generator;
     std::string evidence_level;
+    std::string timer_evidence_level;
+    std::string execution_evidence_level;
+    std::string backend_status;
     std::string control_level;
     std::vector<std::string> errors;
     std::vector<std::string> warnings;

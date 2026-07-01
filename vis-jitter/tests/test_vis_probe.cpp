@@ -32,7 +32,10 @@ int main() {
     if (empty(auto_report.platform_profile.arch) ||
         empty(auto_report.execution_profile.execution_environment) ||
         empty(auto_report.probe_result.selected_backend) ||
-        empty(auto_report.probe_result.evidence_level)) {
+        empty(auto_report.probe_result.evidence_level) ||
+        empty(auto_report.probe_result.backend_status) ||
+        empty(auto_report.probe_result.timer_evidence_level) ||
+        empty(auto_report.probe_result.execution_evidence_level)) {
         std::printf("[test] FAILED: auto probe report is incomplete.\n");
         return 1;
     }
@@ -55,6 +58,8 @@ int main() {
                     "posix_generic") != 0 ||
         std::strcmp(posix_report.probe_result.evidence_level,
                     "portable_user_space") != 0 ||
+        std::strcmp(posix_report.probe_result.backend_status,
+                    "selected") != 0 ||
         std::strcmp(posix_report.platform_profile.selected_time_source,
                     "posix_clock_monotonic") != 0) {
         std::printf("[test] FAILED: posix backend fields are wrong.\n");
@@ -92,12 +97,32 @@ int main() {
     }
 #endif
 
+    vis_probe_config_t arinc_config{
+        vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE};
+    vis_probe_report_t arinc_report;
+    status = vis_probe_run(&arinc_config, &arinc_report);
+    if (status != vis_probe_status_t::VIS_PROBE_OK ||
+        std::strcmp(arinc_report.probe_result.selected_backend,
+                    "arinc653_partition_probe") != 0 ||
+        std::strcmp(arinc_report.probe_result.evidence_level,
+                    "contract_only") != 0 ||
+        std::strcmp(arinc_report.probe_result.backend_status,
+                    "recognized_api_missing") != 0 ||
+        std::strstr(arinc_report.probe_result.unsupported_reason,
+                    "arinc653_partition_services") == nullptr) {
+        std::printf("[test] FAILED: ARINC stub backend contract is wrong.\n");
+        return 1;
+    }
+
     char* json = vis_probe_report_to_json(&posix_report);
     if (json == nullptr || std::strstr(json, "\"vis_probe_report\"") == nullptr ||
         std::strstr(json, "\"evidence_level\": \"portable_user_space\"") ==
             nullptr ||
+        std::strstr(json, "\"backend_status\": \"selected\"") ==
+            nullptr ||
         std::strstr(json, "\"arinc653_surface\"") == nullptr ||
         std::strstr(json, "\"hypervisor_surface\"") == nullptr ||
+        std::strstr(json, "\"execution_evidence_level\"") == nullptr ||
         std::strstr(json, "\"portability_tier\"") ==
             nullptr) {
         std::printf("[test] FAILED: probe JSON serialization failed.\n");

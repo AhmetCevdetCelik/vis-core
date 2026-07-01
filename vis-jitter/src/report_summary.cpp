@@ -155,6 +155,16 @@ static void append_metadata(std::ostringstream& out,
     if (evidence_level != "unknown") {
         out << "- Evidence level: " << evidence_level << "\n";
     }
+    const std::string timer_evidence_level =
+        field_or_unknown(json, "timer_evidence_level");
+    if (timer_evidence_level != "unknown") {
+        out << "- Timer evidence: " << timer_evidence_level << "\n";
+    }
+    const std::string execution_evidence_level =
+        field_or_unknown(json, "execution_evidence_level");
+    if (execution_evidence_level != "unknown") {
+        out << "- Execution evidence: " << execution_evidence_level << "\n";
+    }
 
     const std::string confidence_level =
         field_or_unknown(json, "confidence_level");
@@ -186,6 +196,8 @@ static void append_what_changed(std::ostringstream& out,
     if (v.report_type == "vis_probe_report") {
         const std::string backend =
             field_or_unknown(json, "selected_backend");
+        const std::string backend_status =
+            field_or_unknown(json, "backend_status");
         const std::string source =
             field_or_unknown(json, "selected_time_source");
         const std::string environment =
@@ -194,6 +206,9 @@ static void append_what_changed(std::ostringstream& out,
             << "surface evidence without assuming Linux/x86 jitter access.\n";
         if (backend != "unknown") {
             out << "- Selected backend: `" << backend << "`.\n";
+        }
+        if (backend_status != "unknown") {
+            out << "- Backend status: `" << backend_status << "`.\n";
         }
         if (source != "unknown") {
             out << "- Selected time source: `" << source << "`.\n";
