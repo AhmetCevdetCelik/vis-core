@@ -126,6 +126,7 @@ static bool write_file(const std::string& path,
 
 static std::string describe_report_type(const std::string& type) {
     if (type == "vis_report") return "Core CPU jitter report";
+    if (type == "vis_probe_report") return "Portable VIS probe report";
     if (type == "vis_doctor_report") return "VIS Doctor system diagnosis";
     if (type == "vis_run_attestation") return "VIS CPU runtime attestation";
     if (type == "vis_compare_report") return "VIS CPU profile comparison";
@@ -178,6 +179,27 @@ static void append_what_changed(std::ostringstream& out,
         } else {
             out << "- This appears to be inspect-oriented evidence; CPU "
                 << "candidate ranking may require a scan run.\n";
+        }
+        return;
+    }
+
+    if (v.report_type == "vis_probe_report") {
+        const std::string backend =
+            field_or_unknown(json, "selected_backend");
+        const std::string source =
+            field_or_unknown(json, "selected_time_source");
+        const std::string environment =
+            field_or_unknown(json, "execution_environment");
+        out << "- VIS Probe captured portable timing-source and execution "
+            << "surface evidence without assuming Linux/x86 jitter access.\n";
+        if (backend != "unknown") {
+            out << "- Selected backend: `" << backend << "`.\n";
+        }
+        if (source != "unknown") {
+            out << "- Selected time source: `" << source << "`.\n";
+        }
+        if (environment != "unknown") {
+            out << "- Execution environment: `" << environment << "`.\n";
         }
         return;
     }
@@ -262,6 +284,9 @@ static void append_not_proven(std::ostringstream& out,
     if (v.report_type == "vis_mem_compare_report") {
         out << "- Probe-local memory results do not prove the same improvement "
             << "inside the real workload allocator.\n";
+    } else if (v.report_type == "vis_probe_report") {
+        out << "- Probe evidence does not prove WCET, temporal isolation, or "
+            << "certified RTOS behavior.\n";
     } else if (v.report_type == "vis_mem_compare_run_report") {
         out << "- Sequential workload comparisons can be affected by ordering, "
             << "cache warmth, and background activity.\n";
@@ -285,6 +310,9 @@ static void append_next_step(std::ostringstream& out,
         out << "- Run or repeat a workload-specific scan, then validate the "
             << "recommended CPU policy with a workload audit/comparison "
             << "workflow before making a control claim.\n";
+    } else if (v.report_type == "vis_probe_report") {
+        out << "- Add or implement a platform-specific backend for the target "
+            << "execution environment before making stronger timing claims.\n";
     } else if (v.report_type == "vis_mem_probe_report") {
         out << "- Compare memory profiles, then test a real workload with "
             << "child memory evidence before promoting a policy.\n";

@@ -42,6 +42,16 @@ int main() {
         std::printf("[test] FAILED: selected time source fields are incomplete.\n");
         return 1;
     }
+    if (empty(profile.timer_access_model) ||
+        empty(profile.scheduler_model) ||
+        empty(profile.partitioning_hint) ||
+        empty(profile.posix_profile) ||
+        empty(profile.arinc653_surface) ||
+        empty(profile.hypervisor_surface) ||
+        empty(profile.runtime_isolation_hint)) {
+        std::printf("[test] FAILED: execution capability fields are incomplete.\n");
+        return 1;
+    }
     if (profile.candidate_count == 0 || profile.candidate_count > 4) {
         std::printf("[test] FAILED: time source candidate count is invalid.\n");
         return 1;

@@ -55,9 +55,11 @@ int main(int argc, char** argv) {
                     : result.generator.c_str());
     if (!result.evidence_level.empty()) {
         std::printf("Evidence level: %s\n", result.evidence_level.c_str());
-        std::printf("Evidence meaning: %s\n",
-                    vis_policy_evidence_level_semantics(
-                        result.evidence_level).c_str());
+        const std::string evidence_meaning =
+            result.report_type == "vis_probe_report"
+                ? vis_probe_evidence_level_semantics(result.evidence_level)
+                : vis_policy_evidence_level_semantics(result.evidence_level);
+        std::printf("Evidence meaning: %s\n", evidence_meaning.c_str());
     }
     if (!result.control_level.empty()) {
         std::printf("Control level: %s\n", result.control_level.c_str());

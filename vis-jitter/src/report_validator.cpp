@@ -66,6 +66,102 @@ static bool find_json_field_colon(const std::string& json,
     return false;
 }
 
+static bool extract_root_level_string_field(const std::string& json,
+                                            const std::string& root,
+                                            const std::string& field,
+                                            std::string* value) {
+    const std::string root_needle = "\"" + root + "\"";
+    size_t root_pos = json.find(root_needle);
+    if (root_pos == std::string::npos) return false;
+
+    size_t root_colon = json.find(':', root_pos + root_needle.size());
+    if (root_colon == std::string::npos) return false;
+    size_t root_open = json.find('{', root_colon + 1);
+    if (root_open == std::string::npos) return false;
+
+    bool in_string = false;
+    bool escaped = false;
+    int depth = 1;
+    for (size_t i = root_open + 1; i < json.size(); i++) {
+        const char c = json[i];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if (c == '"') {
+            if (depth == 1) {
+                std::string key;
+                bool key_escaped = false;
+                size_t end = i + 1;
+                for (; end < json.size(); end++) {
+                    const char kc = json[end];
+                    if (key_escaped) {
+                        key.push_back(kc);
+                        key_escaped = false;
+                        continue;
+                    }
+                    if (kc == '\\') {
+                        key_escaped = true;
+                        continue;
+                    }
+                    if (kc == '"') break;
+                    key.push_back(kc);
+                }
+                if (end >= json.size()) return false;
+                size_t after = json.find_first_not_of(" \t\r\n", end + 1);
+                if (after != std::string::npos && json[after] == ':' &&
+                    key == field) {
+                    size_t quote = json.find('"', after + 1);
+                    if (quote == std::string::npos) return false;
+                    std::string out;
+                    bool value_escaped = false;
+                    for (size_t v = quote + 1; v < json.size(); v++) {
+                        const char vc = json[v];
+                        if (value_escaped) {
+                            out.push_back(vc);
+                            value_escaped = false;
+                            continue;
+                        }
+                        if (vc == '\\') {
+                            value_escaped = true;
+                            continue;
+                        }
+                        if (vc == '"') {
+                            if (value != nullptr) *value = out;
+                            return true;
+                        }
+                        out.push_back(vc);
+                    }
+                    return false;
+                }
+                i = end;
+                continue;
+            }
+            in_string = true;
+            continue;
+        }
+
+        if (c == '{' || c == '[') {
+            depth++;
+        } else if (c == '}' || c == ']') {
+            depth--;
+            if (depth == 0) return false;
+        }
+    }
+    return false;
+}
+
 static bool json_bool_field_is_true(const std::string& json,
                                     const std::string& field) {
     size_t colon = 0;
@@ -84,6 +180,7 @@ static bool json_has_field(const std::string& json,
 static std::string detect_report_type(const std::string& json) {
     static const char* kTypes[] = {
         "vis_report",
+        "vis_probe_report",
         "vis_doctor_report",
         "vis_run_attestation",
         "vis_compare_report",
@@ -182,10 +279,61 @@ static bool is_policy_bundle_type(const std::string& type) {
            type == "vis_mem_policy_bundle";
 }
 
+static void require_field(const std::string& json,
+                          const std::string& field,
+                          vis_report_validation_result_t* result);
+
+static void validate_probe_report_semantics(
+    const std::string& json,
+    vis_report_validation_result_t* result
+) {
+    if (!json_has_field(json, "platform_profile")) {
+        result->errors.push_back("missing required field: platform_profile");
+    }
+    if (!json_has_field(json, "execution_profile")) {
+        result->errors.push_back("missing required field: execution_profile");
+    }
+    if (!json_has_field(json, "probe_result")) {
+        result->errors.push_back("missing required field: probe_result");
+    }
+    if (!extract_root_level_string_field(json, "vis_probe_report",
+                                         "evidence_level",
+                                         &result->evidence_level)) {
+        result->errors.push_back("missing required field: evidence_level");
+        return;
+    }
+
+    if (!vis_probe_evidence_level_is_valid(result->evidence_level)) {
+        result->errors.push_back("invalid probe evidence_level: " +
+                                 result->evidence_level);
+        return;
+    }
+
+    std::string selected_time_source;
+    extract_json_string_field(json, "selected_time_source",
+                              &selected_time_source);
+    if (result->evidence_level == "linux_x86_rich_evidence" &&
+        selected_time_source == "posix_clock_monotonic") {
+        result->errors.push_back(
+            "linux_x86_rich_evidence cannot rely on posix_clock_monotonic");
+    }
+    if (result->evidence_level == "arm_generic_timer_evidence" &&
+        selected_time_source != "arm_cntvct_el0") {
+        result->errors.push_back(
+            "arm_generic_timer_evidence must rely on arm_cntvct_el0");
+    }
+}
+
 bool vis_policy_evidence_level_is_valid(const std::string& level) {
     return level == "advisory" ||
            level == "attested" ||
            level == "production_controlled";
+}
+
+bool vis_probe_evidence_level_is_valid(const std::string& level) {
+    return level == "portable_user_space" ||
+           level == "linux_x86_rich_evidence" ||
+           level == "arm_generic_timer_evidence";
 }
 
 std::string vis_policy_evidence_level_semantics(const std::string& level) {
@@ -203,6 +351,22 @@ std::string vis_policy_evidence_level_semantics(const std::string& level) {
                "as cgroup/cpuset with cleanup and escape detection.";
     }
     return "Unknown policy evidence level.";
+}
+
+std::string vis_probe_evidence_level_semantics(const std::string& level) {
+    if (level == "portable_user_space") {
+        return "Probe used portable user-space timing and execution evidence "
+               "without architecture-specific privileged counters.";
+    }
+    if (level == "linux_x86_rich_evidence") {
+        return "Probe selected Linux/x86 timing evidence such as RDTSCP "
+               "surfaces while keeping jitter attestation out of scope.";
+    }
+    if (level == "arm_generic_timer_evidence") {
+        return "Probe selected ARM generic timer evidence while leaving RTOS "
+               "partition scheduling and interrupt attestation out of scope.";
+    }
+    return "Unknown probe evidence level.";
 }
 
 static void require_field(const std::string& json,
@@ -322,6 +486,9 @@ bool vis_report_validate_json(const std::string& json,
 
     if (result->errors.empty() && is_policy_bundle_type(result->report_type)) {
         validate_policy_bundle_semantics(json, result);
+    } else if (result->errors.empty() &&
+               result->report_type == "vis_probe_report") {
+        validate_probe_report_semantics(json, result);
     }
 
     if (result->errors.empty() && result->generator.empty()) {

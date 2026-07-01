@@ -58,6 +58,30 @@ int main() {
         return 1;
     }
 
+    const std::string probe =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-probe 0.1.0\",\n"
+        "    \"platform_profile\": {\n"
+        "      \"selected_time_source\": \"posix_clock_monotonic\"\n"
+        "    },\n"
+        "    \"execution_profile\": {\n"
+        "      \"execution_environment\": \"posix_user_space\"\n"
+        "    },\n"
+        "    \"probe_result\": {\n"
+        "      \"selected_backend\": \"posix_generic\"\n"
+        "    },\n"
+        "    \"evidence_level\": \"portable_user_space\"\n"
+        "  }\n"
+        "}\n";
+    if (!vis_report_validate_json(probe, &result) ||
+        result.report_type != "vis_probe_report" ||
+        result.evidence_level != "portable_user_space") {
+        std::fprintf(stderr, "[test] VIS Probe report was rejected\n");
+        return 1;
+    }
+
     const std::string run_with_nested_policy =
         "{\n"
         "  \"vis_run_attestation\": {\n"
@@ -109,8 +133,18 @@ int main() {
         !vis_policy_evidence_level_is_valid("attested") ||
         !vis_policy_evidence_level_is_valid("production_controlled") ||
         vis_policy_evidence_level_is_valid("strong") ||
+        !vis_probe_evidence_level_is_valid("portable_user_space") ||
+        !vis_probe_evidence_level_is_valid("linux_x86_rich_evidence") ||
+        !vis_probe_evidence_level_is_valid("arm_generic_timer_evidence") ||
+        vis_probe_evidence_level_is_valid("portable") ||
         vis_policy_evidence_level_semantics("attested").find("/proc") ==
-            std::string::npos) {
+            std::string::npos ||
+        vis_probe_evidence_level_semantics("portable_user_space").find(
+            "portable user-space") == std::string::npos ||
+        vis_probe_evidence_level_semantics("linux_x86_rich_evidence").find(
+            "RDTSCP") == std::string::npos ||
+        vis_probe_evidence_level_semantics("arm_generic_timer_evidence").find(
+            "ARM generic timer") == std::string::npos) {
         std::fprintf(stderr, "[test] policy evidence semantics are wrong\n");
         return 1;
     }

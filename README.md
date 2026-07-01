@@ -16,6 +16,7 @@ testing:
 - report validation, redaction, summary, and bundle tooling
 - claim boundaries and community testing docs
 - portable platform profiling foundations for future non-x86 evidence paths
+- ARM generic timer and RTOS-surface probe foundations for future target backends
 
 VIS Core is **not** a magic accelerator. It does not claim to make every
 program faster. Its purpose is narrower:
@@ -50,6 +51,8 @@ The implementation lives in `vis-jitter/`.
 Public tools:
 
 - `vis-jitter`: SMI-aware CPU jitter measurement
+- `vis-probe`: portable timing-source and execution-surface probe
+  - records POSIX/ARINC/AUTOSAR/hypervisor surface hints without over-claiming certification
 - `vis-doctor`: host inspection and CPU evidence diagnosis
 - `vis-report-validate`: VIS report schema/metadata validation
 - `vis-report-redact`: share-safe redaction for report JSON
@@ -103,6 +106,7 @@ sudo apt install clang-format cppcheck
 ```bash
 cd vis-jitter
 make
+make vis-probe
 make test
 make lint
 make docs-check
@@ -117,6 +121,22 @@ sudo ./vis-doctor --scan --duration 30 --threshold 100 \
   --llm doctor.md \
   --cpu-policy-output vis-cpu-policy.json
 ```
+
+Portable probe smoke:
+
+```bash
+cd vis-jitter
+make vis-probe
+./vis-probe --backend auto --output probe.json
+./vis-report-validate probe.json
+```
+
+Available probe backends today:
+
+- `posix_generic`: portable user-space fallback
+- `linux_x86_rdtscp_msr`: richer Linux/x86 timer evidence
+- `arm_generic_timer`: AArch64 generic timer evidence
+- `auto`: prefers architecture-specific evidence, then falls back safely
 
 ## Report Bundle Smoke
 
