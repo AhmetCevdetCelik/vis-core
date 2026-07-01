@@ -65,12 +65,27 @@ struct vis_probe_result_t {
     char limitations[256];
 };
 
+struct vis_target_contract_t {
+    char target_profile_family[48];
+    char target_timer_model[48];
+    char target_scheduler_model[48];
+    char target_partition_model[48];
+    char target_privilege_model[48];
+    char target_runtime_api_status[48];
+    char target_arinc653_surface[48];
+    char target_posix_pse53_surface[48];
+    char target_autosar_adaptive_surface[48];
+    char target_hypervisor_surface[48];
+    char target_limitations[256];
+};
+
 struct vis_probe_report_t {
     char schema_version[8];
     char report_id[40];
     char generated_at[32];
     char generator[64];
     vis_platform_profile_t platform_profile;
+    vis_target_contract_t target_contract;
     vis_execution_profile_t execution_profile;
     vis_probe_result_t probe_result;
 };

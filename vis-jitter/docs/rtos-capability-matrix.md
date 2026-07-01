@@ -24,6 +24,12 @@ The probe report should map target evidence into these areas:
 - `platform_profile.autosar_adaptive_surface`
 - `platform_profile.hypervisor_surface`
 - `platform_profile.runtime_isolation_hint`
+- `target_contract.target_profile_family`
+- `target_contract.target_timer_model`
+- `target_contract.target_scheduler_model`
+- `target_contract.target_partition_model`
+- `target_contract.target_privilege_model`
+- `target_contract.target_runtime_api_status`
 - `probe_result.timer_evidence_level`
 - `probe_result.execution_evidence_level`
 - `probe_result.backend_status`
@@ -37,6 +43,7 @@ What VIS may safely say today:
 - a backend is recognized by the probe
 - the current host lacks the target runtime API
 - timing-source evidence belongs to the current host, not the absent RTOS
+- host evidence and target contract are distinct blocks in the report
 
 What VIS must not say today:
 

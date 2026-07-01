@@ -9,6 +9,7 @@
 #include "../include/report_validator.hpp"
 
 #include "../include/report_schema.hpp"
+#include "../include/vis_probe_semantics.hpp"
 
 #include <fstream>
 #include <sstream>
@@ -296,6 +297,9 @@ static void validate_probe_report_semantics(
     if (!json_has_field(json, "probe_result")) {
         result->errors.push_back("missing required field: probe_result");
     }
+    if (!json_has_field(json, "target_contract")) {
+        result->errors.push_back("missing required field: target_contract");
+    }
     if (!extract_root_level_string_field(json, "vis_probe_report",
                                          "evidence_level",
                                          &result->evidence_level)) {
@@ -307,11 +311,38 @@ static void validate_probe_report_semantics(
                               &result->timer_evidence_level);
     extract_json_string_field(json, "execution_evidence_level",
                               &result->execution_evidence_level);
+    extract_json_string_field(json, "target_profile_family",
+                              &result->target_profile_family);
+    extract_json_string_field(json, "target_runtime_api_status",
+                              &result->target_runtime_api_status);
 
     if (!vis_probe_evidence_level_is_valid(result->evidence_level)) {
         result->errors.push_back("invalid probe evidence_level: " +
                                  result->evidence_level);
         return;
+    }
+    if (!result->backend_status.empty() &&
+        !vis_probe_backend_status_is_valid(result->backend_status)) {
+        result->errors.push_back("invalid probe backend_status: " +
+                                 result->backend_status);
+    }
+    if (!result->timer_evidence_level.empty() &&
+        !vis_probe_timer_evidence_level_is_valid(
+            result->timer_evidence_level)) {
+        result->errors.push_back("invalid timer_evidence_level: " +
+                                 result->timer_evidence_level);
+    }
+    if (!result->execution_evidence_level.empty() &&
+        !vis_probe_execution_evidence_level_is_valid(
+            result->execution_evidence_level)) {
+        result->errors.push_back("invalid execution_evidence_level: " +
+                                 result->execution_evidence_level);
+    }
+    if (!result->target_runtime_api_status.empty() &&
+        !vis_probe_target_runtime_api_status_is_valid(
+            result->target_runtime_api_status)) {
+        result->errors.push_back("invalid target_runtime_api_status: " +
+                                 result->target_runtime_api_status);
     }
 
     std::string selected_time_source;
@@ -331,6 +362,17 @@ static void validate_probe_report_semantics(
         result->backend_status == "selected") {
         result->errors.push_back(
             "contract_only probe evidence cannot claim backend_status selected");
+    }
+    if (result->target_runtime_api_status == "host_native" &&
+        result->backend_status == "recognized_api_missing") {
+        result->errors.push_back(
+            "host_native target runtime cannot claim recognized_api_missing");
+    }
+    if (result->execution_evidence_level == "rtos_execution_surface" &&
+        result->target_runtime_api_status != "host_native") {
+        result->warnings.push_back(
+            "rtos_execution_surface should usually require a host_native "
+            "target runtime API status");
     }
     if ((result->evidence_level == "linux_x86_rich_evidence" ||
          result->evidence_level == "arm_generic_timer_evidence" ||

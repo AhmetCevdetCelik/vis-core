@@ -56,6 +56,7 @@ Allowed:
 - `VIS recorded architecture, OS/runtime, ABI, and timing-source capability evidence.`
 - `VIS selected a timing source and reported its evidence level.`
 - `VIS used a POSIX fallback timing source when architecture-specific evidence was unavailable.`
+- `VIS modeled a target RTOS contract separately from current host evidence.`
 
 Not allowed:
 
@@ -77,6 +78,7 @@ Required before saying `VIS produced rich platform-specific timing evidence`:
 Required before saying `VIS observed RTOS execution evidence`:
 
 - the backend status is `selected`
+- the target runtime API status is `host_native`
 - execution evidence is stronger than `contract_only`
 - the report states which partition/scheduler surface was actually visible
 - limitations do not say that target APIs were missing

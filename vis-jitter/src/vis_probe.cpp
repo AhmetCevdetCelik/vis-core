@@ -218,6 +218,55 @@ static void fill_probe_result(vis_probe_result_t* result,
                 limitations);
 }
 
+static void fill_target_contract(vis_target_contract_t* contract,
+                                 const char* profile_family,
+                                 const char* timer_model,
+                                 const char* scheduler_model,
+                                 const char* partition_model,
+                                 const char* privilege_model,
+                                 const char* runtime_api_status,
+                                 const char* arinc653_surface,
+                                 const char* posix_pse53_surface,
+                                 const char* autosar_adaptive_surface,
+                                 const char* hypervisor_surface,
+                                 const char* limitations) {
+    if (contract == nullptr) return;
+
+    copy_string(contract->target_profile_family,
+                sizeof(contract->target_profile_family),
+                profile_family);
+    copy_string(contract->target_timer_model,
+                sizeof(contract->target_timer_model),
+                timer_model);
+    copy_string(contract->target_scheduler_model,
+                sizeof(contract->target_scheduler_model),
+                scheduler_model);
+    copy_string(contract->target_partition_model,
+                sizeof(contract->target_partition_model),
+                partition_model);
+    copy_string(contract->target_privilege_model,
+                sizeof(contract->target_privilege_model),
+                privilege_model);
+    copy_string(contract->target_runtime_api_status,
+                sizeof(contract->target_runtime_api_status),
+                runtime_api_status);
+    copy_string(contract->target_arinc653_surface,
+                sizeof(contract->target_arinc653_surface),
+                arinc653_surface);
+    copy_string(contract->target_posix_pse53_surface,
+                sizeof(contract->target_posix_pse53_surface),
+                posix_pse53_surface);
+    copy_string(contract->target_autosar_adaptive_surface,
+                sizeof(contract->target_autosar_adaptive_surface),
+                autosar_adaptive_surface);
+    copy_string(contract->target_hypervisor_surface,
+                sizeof(contract->target_hypervisor_surface),
+                hypervisor_surface);
+    copy_string(contract->target_limitations,
+                sizeof(contract->target_limitations),
+                limitations);
+}
+
 static bool select_platform_candidate(vis_platform_profile_t* profile,
                                       const char* candidate_name,
                                       const char* evidence_level_override,
@@ -320,6 +369,32 @@ static void fill_common_execution_profile(vis_execution_profile_t* execution,
                 "portable_probe_foundation");
 }
 
+static void fill_host_native_target_contract(
+    vis_target_contract_t* contract,
+    const vis_platform_profile_t* platform,
+    const char* profile_family
+) {
+    if (contract == nullptr || platform == nullptr) return;
+
+    fill_target_contract(
+        contract,
+        profile_family,
+        platform->selected_time_source,
+        platform->scheduler_model,
+        platform->partitioning_hint,
+        platform->privileged_counters,
+        "host_native",
+        "not_claimed",
+        std::strcmp(platform->os_family, "linux") == 0 ||
+                std::strcmp(platform->os_family, "posix") == 0 ||
+                std::strcmp(platform->os_family, "android") == 0
+            ? "host_posix_like"
+            : "not_claimed",
+        "not_claimed",
+        "not_claimed",
+        "Target contract matches the current hosted runtime.");
+}
+
 static vis_probe_status_t run_posix_generic_backend(vis_probe_report_t* report) {
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
     if (vis_platform_detect_profile(&report->platform_profile) < 0) {
@@ -338,6 +413,9 @@ static vis_probe_status_t run_posix_generic_backend(vis_probe_report_t* report) 
 
     fill_common_execution_profile(&report->execution_profile,
                                   &report->platform_profile);
+    fill_host_native_target_contract(&report->target_contract,
+                                     &report->platform_profile,
+                                     "hosted_posix");
     fill_probe_result(&report->probe_result,
                       "posix_generic",
                       "selected",
@@ -373,6 +451,9 @@ static vis_probe_status_t run_arm_generic_timer_backend(
 
     fill_common_execution_profile(&report->execution_profile,
                                   &report->platform_profile);
+    fill_host_native_target_contract(&report->target_contract,
+                                     &report->platform_profile,
+                                     "hosted_aarch64");
     fill_probe_result(&report->probe_result,
                       "arm_generic_timer",
                       "selected",
@@ -410,6 +491,9 @@ static vis_probe_status_t run_linux_x86_backend(vis_probe_report_t* report) {
 
     fill_common_execution_profile(&report->execution_profile,
                                   &report->platform_profile);
+    fill_host_native_target_contract(&report->target_contract,
+                                     &report->platform_profile,
+                                     "hosted_linux_x86");
     fill_probe_result(&report->probe_result,
                       "linux_x86_rdtscp_msr",
                       "selected",
@@ -478,6 +562,8 @@ static void override_execution_surface(vis_execution_profile_t* execution,
 static vis_probe_status_t emit_contract_only_stub(
     vis_probe_report_t* report,
     const char* backend_name,
+    const char* target_profile_family,
+    const char* target_timer_model,
     const char* backend_status_reason,
     const char* unsupported_reason,
     const char* partition_model,
@@ -506,6 +592,20 @@ static vis_probe_status_t emit_contract_only_stub(
     copy_string(report->execution_profile.portability_tier,
                 sizeof(report->execution_profile.portability_tier),
                 "rtos_contract_stub");
+    fill_target_contract(&report->target_contract,
+                         target_profile_family,
+                         target_timer_model,
+                         scheduler_surface,
+                         partition_model,
+                         "target_vendor_api_required",
+                         "recognized_api_missing",
+                         arinc653_surface,
+                         posix_surface,
+                         autosar_surface,
+                         hypervisor_surface,
+                         "Target contract is modeled, but the required RTOS "
+                         "or hypervisor API is unavailable on this hosted "
+                         "runtime.");
 
     fill_probe_result(&report->probe_result,
                       backend_name,
@@ -535,6 +635,8 @@ static vis_probe_status_t run_arinc653_partition_backend(
     return emit_contract_only_stub(
         report,
         "arinc653_partition_probe",
+        "arinc653",
+        "arinc653_partition_clock",
         "ARINC 653 partition services are not available on this hosted Linux "
         "build.",
         "target_runtime_api_missing: arinc653_partition_services",
@@ -551,6 +653,8 @@ static vis_probe_status_t run_posix_pse53_backend(vis_probe_report_t* report) {
     return emit_contract_only_stub(
         report,
         "posix_pse53_probe",
+        "posix_pse53",
+        "pse53_clock_api",
         "POSIX PSE53 scheduling and timer APIs are not exposed as a distinct "
         "target profile on this hosted build.",
         "target_runtime_api_missing: posix_pse53_profile",
@@ -569,6 +673,8 @@ static vis_probe_status_t run_autosar_adaptive_backend(
     return emit_contract_only_stub(
         report,
         "autosar_adaptive_probe",
+        "autosar_adaptive",
+        "adaptive_posix_clock",
         "AUTOSAR Adaptive execution management services are not available on "
         "this hosted build.",
         "target_runtime_api_missing: autosar_adaptive_execution_management",
@@ -587,6 +693,8 @@ static vis_probe_status_t run_hypervisor_partition_backend(
     return emit_contract_only_stub(
         report,
         "hypervisor_partition_probe",
+        "hypervisor_partition",
+        "partition_timer_api",
         "Partition scheduler or virtual-machine control APIs are not exposed "
         "to this hosted user-space build.",
         "target_runtime_api_missing: hypervisor_partition_control",
@@ -601,6 +709,7 @@ static vis_probe_status_t run_hypervisor_partition_backend(
 
 struct vis_probe_backend_descriptor_t {
     vis_probe_backend_hint_t hint;
+    bool auto_candidate;
     vis_probe_status_t (*run)(vis_probe_report_t* report);
 };
 
@@ -621,13 +730,13 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
     generate_timestamp(report->generated_at, sizeof(report->generated_at));
 
     const vis_probe_backend_descriptor_t descriptors[] = {
-        {vis_probe_backend_hint_t::POSIX_GENERIC, run_posix_generic_backend},
-        {vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR, run_linux_x86_backend},
-        {vis_probe_backend_hint_t::ARM_GENERIC_TIMER, run_arm_generic_timer_backend},
-        {vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE, run_arinc653_partition_backend},
-        {vis_probe_backend_hint_t::POSIX_PSE53_PROBE, run_posix_pse53_backend},
-        {vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE, run_autosar_adaptive_backend},
-        {vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE, run_hypervisor_partition_backend},
+        {vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR, true, run_linux_x86_backend},
+        {vis_probe_backend_hint_t::ARM_GENERIC_TIMER, true, run_arm_generic_timer_backend},
+        {vis_probe_backend_hint_t::POSIX_GENERIC, true, run_posix_generic_backend},
+        {vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE, false, run_arinc653_partition_backend},
+        {vis_probe_backend_hint_t::POSIX_PSE53_PROBE, false, run_posix_pse53_backend},
+        {vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE, false, run_autosar_adaptive_backend},
+        {vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE, false, run_hypervisor_partition_backend},
     };
 
     auto run_backend = [&](vis_probe_backend_hint_t hint) {
@@ -642,14 +751,12 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
     vis_probe_status_t status =
         vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
     if (active->backend_hint == vis_probe_backend_hint_t::AUTO) {
-        status = run_linux_x86_backend(report);
-#if defined(__aarch64__)
-        if (status != vis_probe_status_t::VIS_PROBE_OK) {
-            status = run_arm_generic_timer_backend(report);
-        }
-#endif
-        if (status != vis_probe_status_t::VIS_PROBE_OK) {
-            status = run_posix_generic_backend(report);
+        for (const vis_probe_backend_descriptor_t& descriptor : descriptors) {
+            if (!descriptor.auto_candidate) continue;
+            status = descriptor.run(report);
+            if (status == vis_probe_status_t::VIS_PROBE_OK) {
+                break;
+            }
         }
     } else {
         status = run_backend(active->backend_hint);
@@ -667,6 +774,7 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
     if (report == nullptr) return nullptr;
 
     const vis_platform_profile_t* p = &report->platform_profile;
+    const vis_target_contract_t* t = &report->target_contract;
     const vis_execution_profile_t* e = &report->execution_profile;
     const vis_probe_result_t* r = &report->probe_result;
 
@@ -700,6 +808,25 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
     std::string privileged_counters = json_escape(p->privileged_counters);
     std::string claim_level = json_escape(p->claim_level);
     std::string platform_limitations = json_escape(p->limitations);
+    std::string target_profile_family = json_escape(t->target_profile_family);
+    std::string target_timer_model = json_escape(t->target_timer_model);
+    std::string target_scheduler_model =
+        json_escape(t->target_scheduler_model);
+    std::string target_partition_model =
+        json_escape(t->target_partition_model);
+    std::string target_privilege_model =
+        json_escape(t->target_privilege_model);
+    std::string target_runtime_api_status =
+        json_escape(t->target_runtime_api_status);
+    std::string target_arinc653_surface =
+        json_escape(t->target_arinc653_surface);
+    std::string target_posix_pse53_surface =
+        json_escape(t->target_posix_pse53_surface);
+    std::string target_autosar_adaptive_surface =
+        json_escape(t->target_autosar_adaptive_surface);
+    std::string target_hypervisor_surface =
+        json_escape(t->target_hypervisor_surface);
+    std::string target_limitations = json_escape(t->target_limitations);
     std::string execution_environment =
         json_escape(e->execution_environment);
     std::string partition_model = json_escape(e->partition_model);
@@ -795,6 +922,19 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
         "%s\n"
         "      ]\n"
         "    },\n"
+        "    \"target_contract\": {\n"
+        "      \"target_profile_family\": \"%s\",\n"
+        "      \"target_timer_model\": \"%s\",\n"
+        "      \"target_scheduler_model\": \"%s\",\n"
+        "      \"target_partition_model\": \"%s\",\n"
+        "      \"target_privilege_model\": \"%s\",\n"
+        "      \"target_runtime_api_status\": \"%s\",\n"
+        "      \"target_arinc653_surface\": \"%s\",\n"
+        "      \"target_posix_pse53_surface\": \"%s\",\n"
+        "      \"target_autosar_adaptive_surface\": \"%s\",\n"
+        "      \"target_hypervisor_surface\": \"%s\",\n"
+        "      \"target_limitations\": \"%s\"\n"
+        "    },\n"
         "    \"execution_profile\": {\n"
         "      \"execution_environment\": \"%s\",\n"
         "      \"partition_model\": \"%s\",\n"
@@ -858,6 +998,17 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
         claim_level.c_str(),
         platform_limitations.c_str(),
         candidate_json.c_str(),
+        target_profile_family.c_str(),
+        target_timer_model.c_str(),
+        target_scheduler_model.c_str(),
+        target_partition_model.c_str(),
+        target_privilege_model.c_str(),
+        target_runtime_api_status.c_str(),
+        target_arinc653_surface.c_str(),
+        target_posix_pse53_surface.c_str(),
+        target_autosar_adaptive_surface.c_str(),
+        target_hypervisor_surface.c_str(),
+        target_limitations.c_str(),
         execution_environment.c_str(),
         partition_model.c_str(),
         scheduler_surface.c_str(),
@@ -893,6 +1044,7 @@ void vis_probe_report_print_summary(const vis_probe_report_t* report) {
     if (report == nullptr) return;
 
     const vis_platform_profile_t* p = &report->platform_profile;
+    const vis_target_contract_t* t = &report->target_contract;
     const vis_execution_profile_t* e = &report->execution_profile;
     const vis_probe_result_t* r = &report->probe_result;
 
@@ -912,6 +1064,12 @@ void vis_probe_report_print_summary(const vis_probe_report_t* report) {
     std::printf("   Time source : %s (%s)\n",
                 p->selected_time_source, p->time_source_evidence_level);
     std::printf("   Claim level : %s\n", r->evidence_level);
+    std::printf("----------------------------------------\n");
+    std::printf(" Target contract\n");
+    std::printf("   Family      : %s\n", t->target_profile_family);
+    std::printf("   Timer model : %s\n", t->target_timer_model);
+    std::printf("   Runtime API : %s\n", t->target_runtime_api_status);
+    std::printf("   Partition   : %s\n", t->target_partition_model);
     std::printf("----------------------------------------\n");
     std::printf(" Execution profile\n");
     std::printf("   Environment : %s\n", e->execution_environment);

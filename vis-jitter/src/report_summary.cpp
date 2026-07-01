@@ -165,6 +165,11 @@ static void append_metadata(std::ostringstream& out,
     if (execution_evidence_level != "unknown") {
         out << "- Execution evidence: " << execution_evidence_level << "\n";
     }
+    const std::string target_profile_family =
+        field_or_unknown(json, "target_profile_family");
+    if (target_profile_family != "unknown") {
+        out << "- Target contract: " << target_profile_family << "\n";
+    }
 
     const std::string confidence_level =
         field_or_unknown(json, "confidence_level");
@@ -202,6 +207,8 @@ static void append_what_changed(std::ostringstream& out,
             field_or_unknown(json, "selected_time_source");
         const std::string environment =
             field_or_unknown(json, "execution_environment");
+        const std::string target_api_status =
+            field_or_unknown(json, "target_runtime_api_status");
         out << "- VIS Probe captured portable timing-source and execution "
             << "surface evidence without assuming Linux/x86 jitter access.\n";
         if (backend != "unknown") {
@@ -215,6 +222,10 @@ static void append_what_changed(std::ostringstream& out,
         }
         if (environment != "unknown") {
             out << "- Execution environment: `" << environment << "`.\n";
+        }
+        if (target_api_status != "unknown") {
+            out << "- Target runtime API status: `" << target_api_status
+                << "`.\n";
         }
         return;
     }

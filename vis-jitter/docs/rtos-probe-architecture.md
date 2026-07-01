@@ -26,6 +26,9 @@ dragging `/proc`, `/sys`, NUMA, or MSR assumptions into every backend.
 
 The architecture is split into independent evidence axes:
 
+- **host profile**: what the current host actually exposes today;
+- **target contract**: what the requested RTOS or hypervisor backend expects to
+  see before stronger claims become valid;
 - **timer evidence**: which timing source exists, whether it is monotonic, what
   read overhead it shows, and what privilege is required;
 - **execution evidence**: what scheduler, partition, or process model is
@@ -74,6 +77,7 @@ it obvious that target attestation still requires a real backend.
 
 Current probe reports should be interpreted in three layers:
 
+- `target_contract`: requested target family and runtime API status
 - `evidence_level`: overall claim-safe summary
 - `timer_evidence_level`: timing-source confidence
 - `execution_evidence_level`: execution/partition surface confidence
@@ -89,6 +93,13 @@ Recommended meanings:
   evidence
 - `hypervisor_partition_hint`: reserved for future hypervisor/partition surface
   evidence
+
+Current contract states:
+
+- `host_native`: the requested target matches the current hosted runtime
+- `recognized_api_missing`: the target family is modeled, but target APIs are
+  not present on this host
+- `not_supported_on_build`: the build cannot support that target family
 
 ## Backend Expansion Rules
 

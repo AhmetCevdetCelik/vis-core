@@ -35,10 +35,12 @@ DOCTOR_SRCS := $(SRC_DIR)/doctor_main.cpp \
 
 PROBE_SRCS := $(SRC_DIR)/vis_probe_main.cpp \
               $(SRC_DIR)/vis_probe.cpp \
+              $(SRC_DIR)/vis_probe_semantics.cpp \
               $(SRC_DIR)/vis_platform.cpp
 
 REPORT_VALIDATE_SRCS := $(SRC_DIR)/report_validator_main.cpp \
-                        $(SRC_DIR)/report_validator.cpp
+                        $(SRC_DIR)/report_validator.cpp \
+                        $(SRC_DIR)/vis_probe_semantics.cpp
 
 REPORT_REDACT_SRCS := $(SRC_DIR)/report_redactor_main.cpp \
                       $(SRC_DIR)/report_redactor.cpp
@@ -49,10 +51,12 @@ REPORT_BUNDLE_SRCS := $(SRC_DIR)/report_bundle_main.cpp \
 
 REPORT_SUMMARY_SRCS := $(SRC_DIR)/report_summary_main.cpp \
                        $(SRC_DIR)/report_summary.cpp \
-                       $(SRC_DIR)/report_validator.cpp
+                       $(SRC_DIR)/report_validator.cpp \
+                       $(SRC_DIR)/vis_probe_semantics.cpp
 
 HDRS := $(INC_DIR)/vis_jitter.hpp \
         $(INC_DIR)/vis_probe.hpp \
+        $(INC_DIR)/vis_probe_semantics.hpp \
         $(INC_DIR)/vis_platform.hpp \
         $(INC_DIR)/evidence.hpp \
         $(INC_DIR)/measurement.hpp \
@@ -157,22 +161,22 @@ $(TEST_REPORT): $(TEST_DIR)/test_report_json.cpp $(SRC_DIR)/report.cpp $(INC_DIR
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_json.cpp $(SRC_DIR)/report.cpp
 
 $(TEST_REPORT_VALIDATOR): $(TEST_DIR)/test_report_validator.cpp $(SRC_DIR)/report_validator.cpp $(INC_DIR)/report_validator.hpp $(INC_DIR)/report_schema.hpp
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_validator.cpp $(SRC_DIR)/report_validator.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_validator.cpp $(SRC_DIR)/report_validator.cpp $(SRC_DIR)/vis_probe_semantics.cpp
 
 $(TEST_REPORT_REDACTOR): $(TEST_DIR)/test_report_redactor.cpp $(SRC_DIR)/report_redactor.cpp $(INC_DIR)/report_redactor.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_redactor.cpp $(SRC_DIR)/report_redactor.cpp
 
 $(TEST_REPORT_BUNDLE): $(TEST_DIR)/test_report_bundle.cpp $(SRC_DIR)/report_bundle.cpp $(SRC_DIR)/report_validator.cpp $(INC_DIR)/report_bundle.hpp $(INC_DIR)/report_validator.hpp $(INC_DIR)/report_schema.hpp
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_bundle.cpp $(SRC_DIR)/report_bundle.cpp $(SRC_DIR)/report_validator.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_bundle.cpp $(SRC_DIR)/report_bundle.cpp $(SRC_DIR)/report_validator.cpp $(SRC_DIR)/vis_probe_semantics.cpp
 
 $(TEST_REPORT_SUMMARY): $(TEST_DIR)/test_report_summary.cpp $(SRC_DIR)/report_summary.cpp $(SRC_DIR)/report_validator.cpp $(INC_DIR)/report_summary.hpp $(INC_DIR)/report_validator.hpp $(INC_DIR)/report_schema.hpp
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_summary.cpp $(SRC_DIR)/report_summary.cpp $(SRC_DIR)/report_validator.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_summary.cpp $(SRC_DIR)/report_summary.cpp $(SRC_DIR)/report_validator.cpp $(SRC_DIR)/vis_probe_semantics.cpp
 
 $(TEST_API): $(TEST_DIR)/test_public_api.cpp $(SRC_DIR)/measurement.cpp $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(INC_DIR)/measurement.hpp $(INC_DIR)/smi_audit.hpp $(INC_DIR)/histogram.hpp $(INC_DIR)/vis_jitter.hpp $(INC_DIR)/report_schema.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_public_api.cpp $(SRC_DIR)/measurement.cpp $(SRC_DIR)/vis_platform.cpp $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(LDFLAGS)
 
 $(TEST_PROBE): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_platform.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(SRC_DIR)/vis_platform.cpp
 
 $(TEST_PLATFORM): $(TEST_DIR)/test_vis_platform.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_platform.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_platform.cpp $(SRC_DIR)/vis_platform.cpp
