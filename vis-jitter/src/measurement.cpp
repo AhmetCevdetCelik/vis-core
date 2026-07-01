@@ -12,6 +12,7 @@
 #include "../include/report_schema.hpp"
 #include "../include/smi_audit.hpp"
 #include "../include/histogram.hpp"
+#include "../include/vis_platform.hpp"
 
 #include <cerrno>
 #include <cmath>
@@ -22,7 +23,9 @@
 #include <cstring>
 #include <ctime>
 #include <atomic>
+#if defined(__x86_64__) || defined(__i386__)
 #include <cpuid.h>
+#endif
 #include <unistd.h>
 #include <pthread.h>
 #include <sched.h>
@@ -36,6 +39,7 @@
 // ---------------------------------------------------------------------------
 
 static inline uint64_t rdtscp(uint32_t* aux) {
+#if defined(__x86_64__) || defined(__i386__)
     uint64_t rax, rdx;
     __asm__ volatile (
         "rdtscp"
@@ -47,11 +51,21 @@ static inline uint64_t rdtscp(uint32_t* aux) {
     // RDTSCP also returns the core ID in RCX — we use this to
     // detect thread migration mid-measurement.
     return (rdx << 32) | rax;
+#else
+    if (aux != nullptr) {
+        *aux = 0;
+    }
+    return 0;
+#endif
 }
 
 static inline void serialize() {
+#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
     __get_cpuid(0, &eax, &ebx, &ecx, &edx);
+#else
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +127,7 @@ static int pin_thread_to_core(uint32_t core_id) {
 // ---------------------------------------------------------------------------
 
 static double read_tsc_frequency_ghz_from_cpuid() {
+#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
 
     if (__get_cpuid(0x15, &eax, &ebx, &ecx, &edx) &&
@@ -124,6 +139,9 @@ static double read_tsc_frequency_ghz_from_cpuid() {
     }
 
     return 0.0;
+#else
+    return 0.0;
+#endif
 }
 
 static double calibrate_tsc_frequency_ghz() {
@@ -267,6 +285,7 @@ int vis_detect_system(uint32_t core_id, vis_detected_t* detected) {
     }
 
     // TSC features via CPUID
+#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
 
     if (__get_cpuid(0x80000007, &eax, &ebx, &ecx, &edx)) {
@@ -275,6 +294,10 @@ int vis_detect_system(uint32_t core_id, vis_detected_t* detected) {
     if (__get_cpuid(0x80000001, &eax, &ebx, &ecx, &edx)) {
         detected->rdtscp_supported = (edx >> 27) & 1;
     }
+#else
+    detected->tsc_invariant = false;
+    detected->rdtscp_supported = false;
+#endif
 
     return 0;
 }
@@ -527,6 +550,10 @@ vis_status_t vis_jitter_run(
 
     generate_uuid(report->report_id, sizeof(report->report_id));
     generate_timestamp(report->generated_at, sizeof(report->generated_at));
+
+    if (vis_platform_detect_profile(&report->platform) < 0) {
+        return vis_status_t::VIS_ERR_INVALID_ARG;
+    }
 
     if (vis_detect_system(core_id, &report->detected) < 0) {
         return vis_status_t::VIS_ERR_INVALID_ARG;

@@ -15,6 +15,8 @@
 
 #include <cstdint>
 
+#include "vis_platform.hpp"
+
 // ===========================================================================
 // C O N S T A N T S
 // ===========================================================================
@@ -169,6 +171,7 @@ struct vis_report_t {
     char             report_id[40];       /**< UUID v4 string */
     char             generated_at[32];    /**< ISO 8601 timestamp */
     char             generator[64];       /**< e.g. "vis-jitter 1.0.0" */
+    vis_platform_profile_t platform;      /**< Platform identity and timing capability profile */
     vis_detected_t   detected;            /**< Measured system properties */
     vis_asserted_t   asserted;            /**< User-claimed configuration */
     vis_smi_audit_t  smi_audit;           /**< SMI audit results */

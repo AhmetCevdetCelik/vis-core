@@ -49,6 +49,28 @@ Required before saying `VIS controls workload placement`:
 - cleanup result when cgroup mode is used
 - `control_claim_allowed: true` or equivalent report language
 
+## Platform Claims
+
+Allowed:
+
+- `VIS recorded architecture, OS/runtime, ABI, and timing-source capability evidence.`
+- `VIS selected a timing source and reported its evidence level.`
+- `VIS used a POSIX fallback timing source when architecture-specific evidence was unavailable.`
+
+Not allowed:
+
+- `VIS now supports certified RTOS deployments.`
+- `VIS proves WCET or temporal isolation.`
+- `A portable POSIX timer has the same evidence strength as x86 RDTSCP/TSC plus MSR-backed SMI evidence.`
+- `VIS makes ARM, PowerPC, RISC-V, or RTOS workloads deterministic.`
+
+Required before saying `VIS produced rich platform-specific timing evidence`:
+
+- the report includes `platform_profile`
+- the selected time source is available and monotonic
+- the report lists the timing-source evidence level
+- limitations do not downgrade the claim to portable or advisory evidence
+
 ## Memory Claims
 
 Allowed:
