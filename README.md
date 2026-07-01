@@ -15,6 +15,7 @@ testing:
 - structured JSON report metadata
 - report validation, redaction, summary, and bundle tooling
 - claim boundaries and community testing docs
+- portable platform profiling foundations for future non-x86 evidence paths
 
 VIS Core is **not** a magic accelerator. It does not claim to make every
 program faster. Its purpose is narrower:
@@ -58,6 +59,7 @@ Public tools:
 Public docs:
 
 - [Claim boundaries](vis-jitter/docs/claim-boundaries.md)
+- [Portable platform foundation](vis-jitter/docs/portable-platform-foundation.md)
 - [Report package](vis-jitter/docs/report-package.md)
 - [Doctor output](vis-jitter/docs/doctor-output.md)
 - [Community testing](docs/community-testing.md)

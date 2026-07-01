@@ -73,6 +73,7 @@ void vis_report_print_summary(const vis_report_t* report) {
     const vis_results_t*   r = &report->results;
     const vis_smi_audit_t* s = &report->smi_audit;
     const vis_detected_t*  d = &report->detected;
+    const vis_platform_profile_t* p = &report->platform;
 
     printf("\n");
     printf("========================================\n");
@@ -80,6 +81,14 @@ void vis_report_print_summary(const vis_report_t* report) {
     printf("========================================\n");
     printf(" Generated : %s\n", report->generated_at);
     printf(" Report ID : %s\n", report->report_id);
+    printf("----------------------------------------\n");
+    printf(" Platform profile\n");
+    printf("   Arch        : %s\n", p->arch);
+    printf("   OS/env      : %s / %s\n", p->os_family, p->environment);
+    printf("   ABI bits    : %u\n", p->abi_bits);
+    printf("   Time source : %s (%s)\n",
+           p->selected_time_source, p->time_source_evidence_level);
+    printf("   Claim level : %s\n", p->claim_level);
     printf("----------------------------------------\n");
     printf(" System (detected)\n");
     printf("   Core        : %u\n",  d->cpu_core);
@@ -135,6 +144,7 @@ char* vis_report_to_json(const vis_report_t* report) {
     const vis_smi_audit_t* s = &report->smi_audit;
     const vis_detected_t*  d = &report->detected;
     const vis_asserted_t*  a = &report->asserted;
+    const vis_platform_profile_t* p = &report->platform;
 
     std::string schema_version = json_escape(report->schema_version);
     std::string report_id = json_escape(report->report_id);
@@ -145,6 +155,42 @@ char* vis_report_to_json(const vis_report_t* report) {
     std::string egress_memory = json_escape(a->egress_memory);
     std::string rx_buffer_memory = json_escape(a->rx_buffer_memory);
     std::string rejection_policy = json_escape(s->rejection_policy);
+    std::string platform_profile_version = json_escape(p->profile_version);
+    std::string platform_arch = json_escape(p->arch);
+    std::string platform_os_family = json_escape(p->os_family);
+    std::string platform_environment = json_escape(p->environment);
+    std::string platform_kernel_release = json_escape(p->kernel_release);
+    std::string platform_fingerprint = json_escape(p->platform_fingerprint);
+    std::string selected_time_source = json_escape(p->selected_time_source);
+    std::string time_source_evidence_level =
+        json_escape(p->time_source_evidence_level);
+    std::string affinity_control = json_escape(p->affinity_control);
+    std::string interrupt_evidence = json_escape(p->interrupt_evidence);
+    std::string thermal_evidence = json_escape(p->thermal_evidence);
+    std::string memory_policy = json_escape(p->memory_policy);
+    std::string privileged_counters = json_escape(p->privileged_counters);
+    std::string claim_level = json_escape(p->claim_level);
+    std::string limitations = json_escape(p->limitations);
+
+    std::string candidate_json;
+    for (uint32_t i = 0; i < p->candidate_count && i < 4; i++) {
+        const vis_time_source_candidate_t* c = &p->candidates[i];
+        std::string name = json_escape(c->name);
+        std::string evidence_level = json_escape(c->evidence_level);
+        std::string reason = json_escape(c->reason);
+        append_format(&candidate_json,
+            "%s"
+            "          {\"name\": \"%s\", \"available\": %s, "
+            "\"monotonic\": %s, \"read_overhead_ns\": %.1f, "
+            "\"evidence_level\": \"%s\", \"reason\": \"%s\"}",
+            i == 0 ? "" : ",\n",
+            name.c_str(),
+            c->available ? "true" : "false",
+            c->monotonic ? "true" : "false",
+            c->read_overhead_ns,
+            evidence_level.c_str(),
+            reason.c_str());
+    }
 
     std::string json;
     append_format(&json,
@@ -154,6 +200,31 @@ char* vis_report_to_json(const vis_report_t* report) {
         "    \"report_id\": \"%s\",\n"
         "    \"generated_at\": \"%s\",\n"
         "    \"generator\": \"%s\",\n"
+        "    \"platform_profile\": {\n"
+        "      \"profile_version\": \"%s\",\n"
+        "      \"arch\": \"%s\",\n"
+        "      \"os_family\": \"%s\",\n"
+        "      \"environment\": \"%s\",\n"
+        "      \"abi_bits\": %u,\n"
+        "      \"kernel_release\": \"%s\",\n"
+        "      \"platform_fingerprint\": \"%s\",\n"
+        "      \"selected_time_source\": \"%s\",\n"
+        "      \"time_source_evidence_level\": \"%s\",\n"
+        "      \"time_source_read_overhead_ns\": %.1f,\n"
+        "      \"time_source_monotonic\": %s,\n"
+        "      \"capabilities\": {\n"
+        "        \"affinity_control\": \"%s\",\n"
+        "        \"interrupt_evidence\": \"%s\",\n"
+        "        \"thermal_evidence\": \"%s\",\n"
+        "        \"memory_policy\": \"%s\",\n"
+        "        \"privileged_counters\": \"%s\"\n"
+        "      },\n"
+        "      \"claim_level\": \"%s\",\n"
+        "      \"limitations\": \"%s\",\n"
+        "      \"time_source_candidates\": [\n"
+        "%s\n"
+        "      ]\n"
+        "    },\n"
         "    \"system\": {\n"
         "      \"detected\": {\n"
         "        \"cpu_core\": %u,\n"
@@ -209,6 +280,25 @@ char* vis_report_to_json(const vis_report_t* report) {
         report_id.c_str(),
         generated_at.c_str(),
         generator.c_str(),
+        platform_profile_version.c_str(),
+        platform_arch.c_str(),
+        platform_os_family.c_str(),
+        platform_environment.c_str(),
+        p->abi_bits,
+        platform_kernel_release.c_str(),
+        platform_fingerprint.c_str(),
+        selected_time_source.c_str(),
+        time_source_evidence_level.c_str(),
+        p->time_source_read_overhead_ns,
+        p->time_source_monotonic ? "true" : "false",
+        affinity_control.c_str(),
+        interrupt_evidence.c_str(),
+        thermal_evidence.c_str(),
+        memory_policy.c_str(),
+        privileged_counters.c_str(),
+        claim_level.c_str(),
+        limitations.c_str(),
+        candidate_json.c_str(),
         d->cpu_core,
         d->frequency_ghz,
         d->numa_node,

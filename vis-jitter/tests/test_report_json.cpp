@@ -52,6 +52,57 @@ static void populate_report(vis_report_t* report) {
     std::strncpy(report->generator, "vis-jitter test",
                  sizeof(report->generator) - 1);
 
+    std::strncpy(report->platform.profile_version,
+                 VIS_PLATFORM_PROFILE_VERSION,
+                 sizeof(report->platform.profile_version) - 1);
+    std::strncpy(report->platform.arch, "x86_64",
+                 sizeof(report->platform.arch) - 1);
+    std::strncpy(report->platform.os_family, "linux",
+                 sizeof(report->platform.os_family) - 1);
+    std::strncpy(report->platform.environment, "linux_user_space",
+                 sizeof(report->platform.environment) - 1);
+    report->platform.abi_bits = 64;
+    std::strncpy(report->platform.kernel_release, "test-kernel",
+                 sizeof(report->platform.kernel_release) - 1);
+    std::strncpy(report->platform.platform_fingerprint, "abc123",
+                 sizeof(report->platform.platform_fingerprint) - 1);
+    std::strncpy(report->platform.selected_time_source, "x86_rdtscp",
+                 sizeof(report->platform.selected_time_source) - 1);
+    std::strncpy(report->platform.time_source_evidence_level,
+                 "architecture_counter",
+                 sizeof(report->platform.time_source_evidence_level) - 1);
+    report->platform.time_source_read_overhead_ns = 12.5;
+    report->platform.time_source_monotonic = true;
+    std::strncpy(report->platform.affinity_control,
+                 "pthread_affinity_available",
+                 sizeof(report->platform.affinity_control) - 1);
+    std::strncpy(report->platform.interrupt_evidence,
+                 "linux_proc_interrupts_optional",
+                 sizeof(report->platform.interrupt_evidence) - 1);
+    std::strncpy(report->platform.thermal_evidence, "linux_sysfs_optional",
+                 sizeof(report->platform.thermal_evidence) - 1);
+    std::strncpy(report->platform.memory_policy, "linux_numa_optional",
+                 sizeof(report->platform.memory_policy) - 1);
+    std::strncpy(report->platform.privileged_counters,
+                 "msr_requires_root_or_cap_sys_rawio",
+                 sizeof(report->platform.privileged_counters) - 1);
+    std::strncpy(report->platform.claim_level, "linux_x86_rich_evidence",
+                 sizeof(report->platform.claim_level) - 1);
+    std::strncpy(report->platform.limitations, "test limitation",
+                 sizeof(report->platform.limitations) - 1);
+    report->platform.candidate_count = 1;
+    std::strncpy(report->platform.candidates[0].name, "x86_rdtscp",
+                 sizeof(report->platform.candidates[0].name) - 1);
+    report->platform.candidates[0].available = true;
+    report->platform.candidates[0].monotonic = true;
+    report->platform.candidates[0].read_overhead_ns = 12.5;
+    std::strncpy(report->platform.candidates[0].evidence_level,
+                 "architecture_counter",
+                 sizeof(report->platform.candidates[0].evidence_level) - 1);
+    std::strncpy(report->platform.candidates[0].reason,
+                 "test candidate",
+                 sizeof(report->platform.candidates[0].reason) - 1);
+
     report->detected.cpu_core = 2;
     report->detected.frequency_ghz = 4.800;
     report->detected.numa_node = 0;
@@ -112,6 +163,12 @@ int main() {
     const char* required_fields[] = {
         "\"schema_version\": \"" VIS_CORE_REPORT_SCHEMA_VERSION "\"",
         "\"report_id\": \"00000000-0000-4000-8000-000000000000\"",
+        "\"platform_profile\"",
+        "\"arch\": \"x86_64\"",
+        "\"selected_time_source\": \"x86_rdtscp\"",
+        "\"time_source_evidence_level\": \"architecture_counter\"",
+        "\"claim_level\": \"linux_x86_rich_evidence\"",
+        "\"time_source_candidates\"",
         "\"cpu_core\": 2",
         "\"frequency_ghz\": 4.800",
         "\"msr_delta\": 4",
