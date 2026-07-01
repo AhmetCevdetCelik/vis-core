@@ -7,6 +7,7 @@
  */
 
 #include "../include/report_validator.hpp"
+#include "../include/vis_probe_semantics.hpp"
 
 #include <cstdio>
 
@@ -71,6 +72,25 @@ int main(int argc, char** argv) {
     }
     if (!result.backend_status.empty()) {
         std::printf("Backend status: %s\n", result.backend_status.c_str());
+        std::printf("Backend meaning: %s\n",
+                    vis_probe_backend_status_semantics(
+                        result.backend_status).c_str());
+    }
+    if (!result.execution_evidence_level.empty()) {
+        std::printf("Execution meaning: %s\n",
+                    vis_probe_execution_evidence_level_semantics(
+                        result.execution_evidence_level).c_str());
+    }
+    if (!result.target_profile_family.empty()) {
+        std::printf("Target profile: %s\n",
+                    result.target_profile_family.c_str());
+    }
+    if (!result.target_runtime_api_status.empty()) {
+        std::printf("Target runtime API: %s\n",
+                    result.target_runtime_api_status.c_str());
+        std::printf("Target API meaning: %s\n",
+                    vis_probe_target_runtime_api_status_semantics(
+                        result.target_runtime_api_status).c_str());
     }
     if (!result.control_level.empty()) {
         std::printf("Control level: %s\n", result.control_level.c_str());

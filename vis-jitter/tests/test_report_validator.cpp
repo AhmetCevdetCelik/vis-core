@@ -66,6 +66,10 @@ int main() {
         "    \"platform_profile\": {\n"
         "      \"selected_time_source\": \"posix_clock_monotonic\"\n"
         "    },\n"
+        "    \"target_contract\": {\n"
+        "      \"target_profile_family\": \"hosted_posix\",\n"
+        "      \"target_runtime_api_status\": \"host_native\"\n"
+        "    },\n"
         "    \"execution_profile\": {\n"
         "      \"execution_environment\": \"posix_user_space\"\n"
         "    },\n"
@@ -163,6 +167,10 @@ int main() {
         "    \"platform_profile\": {\n"
         "      \"selected_time_source\": \"x86_rdtscp\"\n"
         "    },\n"
+        "    \"target_contract\": {\n"
+        "      \"target_profile_family\": \"arinc653\",\n"
+        "      \"target_runtime_api_status\": \"recognized_api_missing\"\n"
+        "    },\n"
         "    \"execution_profile\": {\n"
         "      \"execution_environment\": \"linux_user_space\"\n"
         "    },\n"
@@ -177,8 +185,39 @@ int main() {
         "}\n";
     if (!vis_report_validate_json(contract_only_probe, &result) ||
         result.evidence_level != "contract_only" ||
-        result.backend_status != "recognized_api_missing") {
+        result.backend_status != "recognized_api_missing" ||
+        result.target_runtime_api_status != "recognized_api_missing") {
         std::fprintf(stderr, "[test] contract-only probe was rejected\n");
+        return 1;
+    }
+
+    const std::string invalid_target_status_probe =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-probe 0.1.0\",\n"
+        "    \"platform_profile\": {\n"
+        "      \"selected_time_source\": \"x86_rdtscp\"\n"
+        "    },\n"
+        "    \"target_contract\": {\n"
+        "      \"target_profile_family\": \"arinc653\",\n"
+        "      \"target_runtime_api_status\": \"host_native\"\n"
+        "    },\n"
+        "    \"execution_profile\": {\n"
+        "      \"execution_environment\": \"linux_user_space\"\n"
+        "    },\n"
+        "    \"probe_result\": {\n"
+        "      \"selected_backend\": \"arinc653_partition_probe\",\n"
+        "      \"backend_status\": \"recognized_api_missing\",\n"
+        "      \"timer_evidence_level\": \"architecture_counter\",\n"
+        "      \"execution_evidence_level\": \"contract_only\"\n"
+        "    },\n"
+        "    \"evidence_level\": \"contract_only\"\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(invalid_target_status_probe, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] invalid target runtime status was accepted\n");
         return 1;
     }
 

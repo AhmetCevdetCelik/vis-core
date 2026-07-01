@@ -46,6 +46,12 @@ int main() {
         std::printf("[test] FAILED: execution surfaces are incomplete.\n");
         return 1;
     }
+    if (empty(auto_report.target_contract.target_profile_family) ||
+        empty(auto_report.target_contract.target_runtime_api_status) ||
+        empty(auto_report.target_contract.target_timer_model)) {
+        std::printf("[test] FAILED: target contract is incomplete.\n");
+        return 1;
+    }
 
     vis_probe_config_t posix_config{vis_probe_backend_hint_t::POSIX_GENERIC};
     vis_probe_report_t posix_report;
@@ -68,6 +74,13 @@ int main() {
     if (std::strcmp(posix_report.execution_profile.portability_tier,
                     "portable_probe_foundation") != 0) {
         std::printf("[test] FAILED: portability tier is wrong.\n");
+        return 1;
+    }
+    if (std::strcmp(posix_report.target_contract.target_profile_family,
+                    "hosted_posix") != 0 ||
+        std::strcmp(posix_report.target_contract.target_runtime_api_status,
+                    "host_native") != 0) {
+        std::printf("[test] FAILED: hosted target contract is wrong.\n");
         return 1;
     }
 
@@ -108,6 +121,10 @@ int main() {
                     "contract_only") != 0 ||
         std::strcmp(arinc_report.probe_result.backend_status,
                     "recognized_api_missing") != 0 ||
+        std::strcmp(arinc_report.target_contract.target_profile_family,
+                    "arinc653") != 0 ||
+        std::strcmp(arinc_report.target_contract.target_runtime_api_status,
+                    "recognized_api_missing") != 0 ||
         std::strstr(arinc_report.probe_result.unsupported_reason,
                     "arinc653_partition_services") == nullptr) {
         std::printf("[test] FAILED: ARINC stub backend contract is wrong.\n");
@@ -119,6 +136,9 @@ int main() {
         std::strstr(json, "\"evidence_level\": \"portable_user_space\"") ==
             nullptr ||
         std::strstr(json, "\"backend_status\": \"selected\"") ==
+            nullptr ||
+        std::strstr(json, "\"target_contract\"") == nullptr ||
+        std::strstr(json, "\"target_profile_family\": \"hosted_posix\"") ==
             nullptr ||
         std::strstr(json, "\"arinc653_surface\"") == nullptr ||
         std::strstr(json, "\"hypervisor_surface\"") == nullptr ||
