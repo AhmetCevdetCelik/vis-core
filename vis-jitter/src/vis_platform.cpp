@@ -83,6 +83,17 @@ static const char* detect_environment() {
 #endif
 }
 
+static const char* detect_hypervisor_surface() {
+#if defined(__linux__)
+    if (access("/sys/hypervisor", F_OK) == 0) {
+        return "linux_sysfs_hypervisor_present";
+    }
+    return "not_detected_rootless";
+#else
+    return "vendor_probe_required";
+#endif
+}
+
 static uint64_t fnv1a64(const char* text, uint64_t hash) {
     if (text == nullptr) {
         return hash;
@@ -192,6 +203,25 @@ static bool x86_rdtscp_monotonic() {
 }
 #endif
 
+#if defined(__aarch64__)
+static inline uint64_t arm_cntvct_read() {
+    uint64_t value = 0;
+    __asm__ volatile("isb" ::: "memory");
+    __asm__ volatile("mrs %0, cntvct_el0" : "=r"(value));
+    return value;
+}
+
+static void arm_cntvct_read_once() {
+    (void)arm_cntvct_read();
+}
+
+static bool arm_cntvct_monotonic() {
+    uint64_t a = arm_cntvct_read();
+    uint64_t b = arm_cntvct_read();
+    return b >= a;
+}
+#endif
+
 static vis_time_source_candidate_t* next_candidate(
     vis_platform_profile_t* profile
 ) {
@@ -245,13 +275,14 @@ static void add_arch_counter_candidate(vis_platform_profile_t* profile) {
     }
 #elif defined(__aarch64__)
     copy_string(candidate->name, sizeof(candidate->name), "arm_cntvct_el0");
-    candidate->available = false;
-    candidate->monotonic = false;
-    candidate->read_overhead_ns = 0.0;
+    candidate->available = true;
+    candidate->monotonic = arm_cntvct_monotonic();
+    candidate->read_overhead_ns =
+        measure_read_overhead_ns(arm_cntvct_read_once);
     copy_string(candidate->evidence_level, sizeof(candidate->evidence_level),
-                "not_probed");
+                "architecture_counter");
     copy_string(candidate->reason, sizeof(candidate->reason),
-                "ARM generic timer backend is reserved for a guarded follow-up.");
+                "AArch64 generic timer is readable from EL0 on this build.");
 #elif defined(__powerpc__) || defined(__powerpc64__) || defined(__ppc__) || defined(__ppc64__)
     copy_string(candidate->name, sizeof(candidate->name), "powerpc_time_base");
     candidate->available = false;
@@ -337,10 +368,27 @@ int vis_platform_detect_profile(vis_platform_profile_t* profile) {
     }
 
     select_time_source(profile);
+    copy_string(profile->hypervisor_surface,
+                sizeof(profile->hypervisor_surface),
+                detect_hypervisor_surface());
 
 #if defined(__linux__)
     copy_string(profile->affinity_control, sizeof(profile->affinity_control),
                 "pthread_affinity_available");
+    copy_string(profile->scheduler_model, sizeof(profile->scheduler_model),
+                "linux_sched_attr_or_pthreads");
+    copy_string(profile->partitioning_hint, sizeof(profile->partitioning_hint),
+                "process_or_container_isolation");
+    copy_string(profile->posix_profile, sizeof(profile->posix_profile),
+                "posix_like_not_pse53_claimed");
+    copy_string(profile->arinc653_surface, sizeof(profile->arinc653_surface),
+                "not_present_in_hosted_linux_build");
+    copy_string(profile->autosar_adaptive_surface,
+                sizeof(profile->autosar_adaptive_surface),
+                "posix_like_user_space_candidate");
+    copy_string(profile->runtime_isolation_hint,
+                sizeof(profile->runtime_isolation_hint),
+                "shared_host_scheduler_runtime");
     copy_string(profile->interrupt_evidence, sizeof(profile->interrupt_evidence),
                 "linux_proc_interrupts_optional");
     copy_string(profile->thermal_evidence, sizeof(profile->thermal_evidence),
@@ -350,6 +398,20 @@ int vis_platform_detect_profile(vis_platform_profile_t* profile) {
 #else
     copy_string(profile->affinity_control, sizeof(profile->affinity_control),
                 "unknown_or_vendor_api");
+    copy_string(profile->scheduler_model, sizeof(profile->scheduler_model),
+                "vendor_scheduler_api");
+    copy_string(profile->partitioning_hint, sizeof(profile->partitioning_hint),
+                "vendor_partition_model");
+    copy_string(profile->posix_profile, sizeof(profile->posix_profile),
+                "vendor_posix_profile");
+    copy_string(profile->arinc653_surface, sizeof(profile->arinc653_surface),
+                "vendor_probe_required");
+    copy_string(profile->autosar_adaptive_surface,
+                sizeof(profile->autosar_adaptive_surface),
+                "vendor_probe_required");
+    copy_string(profile->runtime_isolation_hint,
+                sizeof(profile->runtime_isolation_hint),
+                "runtime_isolation_unknown");
     copy_string(profile->interrupt_evidence, sizeof(profile->interrupt_evidence),
                 "unavailable");
     copy_string(profile->thermal_evidence, sizeof(profile->thermal_evidence),
@@ -357,6 +419,17 @@ int vis_platform_detect_profile(vis_platform_profile_t* profile) {
     copy_string(profile->memory_policy, sizeof(profile->memory_policy),
                 "unavailable");
 #endif
+
+    if (std::strcmp(profile->selected_time_source, "x86_rdtscp") == 0 ||
+        std::strcmp(profile->selected_time_source, "arm_cntvct_el0") == 0) {
+        copy_string(profile->timer_access_model,
+                    sizeof(profile->timer_access_model),
+                    "user_space_arch_counter");
+    } else {
+        copy_string(profile->timer_access_model,
+                    sizeof(profile->timer_access_model),
+                    "posix_clock_api");
+    }
 
 #if defined(__x86_64__) || defined(__i386__)
     copy_string(profile->privileged_counters,
@@ -366,6 +439,14 @@ int vis_platform_detect_profile(vis_platform_profile_t* profile) {
                 "linux_x86_rich_evidence");
     copy_string(profile->limitations, sizeof(profile->limitations),
                 "Portable profile records capability evidence; SMI/MSR evidence remains Linux x86 specific.");
+#elif defined(__aarch64__)
+    copy_string(profile->privileged_counters,
+                sizeof(profile->privileged_counters),
+                "el0_counter_no_privileged_attestation");
+    copy_string(profile->claim_level, sizeof(profile->claim_level),
+                "arm_generic_timer_evidence");
+    copy_string(profile->limitations, sizeof(profile->limitations),
+                "Portable profile records ARM generic timer evidence only; RTOS partitioning, interrupt isolation, and hypervisor claims still require target-specific backends.");
 #else
     copy_string(profile->privileged_counters,
                 sizeof(profile->privileged_counters),

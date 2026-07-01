@@ -29,3 +29,5 @@ bool vis_report_validate_file(const char* path,
                               std::string* error);
 bool vis_policy_evidence_level_is_valid(const std::string& level);
 std::string vis_policy_evidence_level_semantics(const std::string& level);
+bool vis_probe_evidence_level_is_valid(const std::string& level);
+std::string vis_probe_evidence_level_semantics(const std::string& level);

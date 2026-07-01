@@ -40,6 +40,14 @@ struct vis_platform_profile_t {
     bool time_source_monotonic;
 
     char affinity_control[48];
+    char timer_access_model[48];
+    char scheduler_model[48];
+    char partitioning_hint[48];
+    char posix_profile[48];
+    char arinc653_surface[48];
+    char autosar_adaptive_surface[48];
+    char hypervisor_surface[48];
+    char runtime_isolation_hint[64];
     char interrupt_evidence[48];
     char thermal_evidence[48];
     char memory_policy[48];

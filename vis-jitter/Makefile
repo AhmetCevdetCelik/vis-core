@@ -1,6 +1,7 @@
 # VIS Core Makefile
 # Usage:
 #   make                   — build vis-jitter
+#   make vis-probe         — build portable VIS probe
 #   make vis-doctor        — build VIS Doctor
 #   make vis-report-*      — build report tooling
 #   make test              — run rootless core tests
@@ -32,6 +33,10 @@ DOCTOR_SRCS := $(SRC_DIR)/doctor_main.cpp \
                $(SRC_DIR)/histogram.cpp \
                $(SRC_DIR)/report.cpp
 
+PROBE_SRCS := $(SRC_DIR)/vis_probe_main.cpp \
+              $(SRC_DIR)/vis_probe.cpp \
+              $(SRC_DIR)/vis_platform.cpp
+
 REPORT_VALIDATE_SRCS := $(SRC_DIR)/report_validator_main.cpp \
                         $(SRC_DIR)/report_validator.cpp
 
@@ -47,6 +52,7 @@ REPORT_SUMMARY_SRCS := $(SRC_DIR)/report_summary_main.cpp \
                        $(SRC_DIR)/report_validator.cpp
 
 HDRS := $(INC_DIR)/vis_jitter.hpp \
+        $(INC_DIR)/vis_probe.hpp \
         $(INC_DIR)/vis_platform.hpp \
         $(INC_DIR)/evidence.hpp \
         $(INC_DIR)/measurement.hpp \
@@ -61,6 +67,7 @@ HDRS := $(INC_DIR)/vis_jitter.hpp \
         $(INC_DIR)/doctor.hpp
 
 TARGET := vis-jitter
+PROBE_BIN := vis-probe
 DOCTOR_BIN := vis-doctor
 REPORT_VALIDATE_BIN := vis-report-validate
 REPORT_REDACT_BIN := vis-report-redact
@@ -75,6 +82,7 @@ TEST_REPORT_REDACTOR := test_report_redactor
 TEST_REPORT_BUNDLE := test_report_bundle
 TEST_REPORT_SUMMARY := test_report_summary
 TEST_API := test_public_api
+TEST_PROBE := test_vis_probe
 TEST_PLATFORM := test_vis_platform
 TEST_DOCTOR := test_doctor
 
@@ -82,6 +90,9 @@ all: $(TARGET)
 
 $(TARGET): $(CORE_SRCS) $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ $(CORE_SRCS) $(LDFLAGS)
+
+$(PROBE_BIN): $(PROBE_SRCS) $(HDRS)
+	$(CXX) $(CXXFLAGS) -o $@ $(PROBE_SRCS)
 
 $(DOCTOR_BIN): $(DOCTOR_SRCS) $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ $(DOCTOR_SRCS) $(LDFLAGS)
@@ -98,7 +109,7 @@ $(REPORT_BUNDLE_BIN): $(REPORT_BUNDLE_SRCS) $(HDRS)
 $(REPORT_SUMMARY_BIN): $(REPORT_SUMMARY_SRCS) $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ $(REPORT_SUMMARY_SRCS)
 
-test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PLATFORM) $(TEST_DOCTOR)
+test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PLATFORM) $(TEST_DOCTOR)
 	@echo "Running test_histogram..."
 	./$(TEST_HIST)
 	@echo ""
@@ -119,6 +130,9 @@ test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTO
 	@echo ""
 	@echo "Running test_public_api..."
 	./$(TEST_API)
+	@echo ""
+	@echo "Running test_vis_probe..."
+	./$(TEST_PROBE)
 	@echo ""
 	@echo "Running test_vis_platform..."
 	./$(TEST_PLATFORM)
@@ -157,6 +171,9 @@ $(TEST_REPORT_SUMMARY): $(TEST_DIR)/test_report_summary.cpp $(SRC_DIR)/report_su
 $(TEST_API): $(TEST_DIR)/test_public_api.cpp $(SRC_DIR)/measurement.cpp $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(INC_DIR)/measurement.hpp $(INC_DIR)/smi_audit.hpp $(INC_DIR)/histogram.hpp $(INC_DIR)/vis_jitter.hpp $(INC_DIR)/report_schema.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_public_api.cpp $(SRC_DIR)/measurement.cpp $(SRC_DIR)/vis_platform.cpp $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(LDFLAGS)
 
+$(TEST_PROBE): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_platform.cpp
+
 $(TEST_PLATFORM): $(TEST_DIR)/test_vis_platform.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_platform.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_platform.cpp $(SRC_DIR)/vis_platform.cpp
 
@@ -177,6 +194,6 @@ docs-check:
 	../scripts/check-doc-links.sh
 
 clean:
-	rm -f $(TARGET) $(DOCTOR_BIN) $(REPORT_VALIDATE_BIN) $(REPORT_REDACT_BIN) $(REPORT_BUNDLE_BIN) $(REPORT_SUMMARY_BIN) $(TEST_SMI) $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PLATFORM) $(TEST_DOCTOR)
+	rm -f $(TARGET) $(PROBE_BIN) $(DOCTOR_BIN) $(REPORT_VALIDATE_BIN) $(REPORT_REDACT_BIN) $(REPORT_BUNDLE_BIN) $(REPORT_SUMMARY_BIN) $(TEST_SMI) $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PLATFORM) $(TEST_DOCTOR)
 
 .PHONY: all test test-root test-all format-check cppcheck lint lint-extra docs-check clean
