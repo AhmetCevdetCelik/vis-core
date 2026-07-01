@@ -63,6 +63,9 @@ Not allowed:
 - `VIS proves WCET or temporal isolation.`
 - `A portable POSIX timer has the same evidence strength as x86 RDTSCP/TSC plus MSR-backed SMI evidence.`
 - `VIS makes ARM, PowerPC, RISC-V, or RTOS workloads deterministic.`
+- `ARINC 653 surface recognized` means `ARINC 653 attested.`
+- `POSIX-like execution evidence` means `PSE53 compliance proven.`
+- `Hypervisor surface visible` means `partition isolation proven.`
 
 Required before saying `VIS produced rich platform-specific timing evidence`:
 
@@ -70,6 +73,13 @@ Required before saying `VIS produced rich platform-specific timing evidence`:
 - the selected time source is available and monotonic
 - the report lists the timing-source evidence level
 - limitations do not downgrade the claim to portable or advisory evidence
+
+Required before saying `VIS observed RTOS execution evidence`:
+
+- the backend status is `selected`
+- execution evidence is stronger than `contract_only`
+- the report states which partition/scheduler surface was actually visible
+- limitations do not say that target APIs were missing
 
 ## Memory Claims
 

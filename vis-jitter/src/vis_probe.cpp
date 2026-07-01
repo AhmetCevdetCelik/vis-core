@@ -160,10 +160,62 @@ static const char* probe_backend_name(vis_probe_backend_hint_t hint) {
             return "linux_x86_rdtscp_msr";
         case vis_probe_backend_hint_t::ARM_GENERIC_TIMER:
             return "arm_generic_timer";
+        case vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE:
+            return "arinc653_partition_probe";
+        case vis_probe_backend_hint_t::POSIX_PSE53_PROBE:
+            return "posix_pse53_probe";
+        case vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE:
+            return "autosar_adaptive_probe";
+        case vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE:
+            return "hypervisor_partition_probe";
         case vis_probe_backend_hint_t::AUTO:
         default:
             return "auto";
     }
+}
+
+static void fill_probe_result(vis_probe_result_t* result,
+                              const char* selected_backend,
+                              const char* backend_status,
+                              const char* backend_status_reason,
+                              const char* privilege_requirement,
+                              const char* evidence_level,
+                              const char* timer_evidence_level,
+                              const char* execution_evidence_level,
+                              const char* unsupported_reason,
+                              const char* limitations,
+                              const vis_platform_profile_t* platform) {
+    if (result == nullptr || platform == nullptr) return;
+
+    copy_string(result->selected_backend, sizeof(result->selected_backend),
+                selected_backend);
+    copy_string(result->backend_status, sizeof(result->backend_status),
+                backend_status);
+    copy_string(result->backend_status_reason,
+                sizeof(result->backend_status_reason),
+                backend_status_reason);
+    copy_string(result->selected_time_source,
+                sizeof(result->selected_time_source),
+                platform->selected_time_source);
+    result->time_source_monotonic = platform->time_source_monotonic;
+    result->time_source_read_overhead_ns =
+        platform->time_source_read_overhead_ns;
+    copy_string(result->privilege_requirement,
+                sizeof(result->privilege_requirement),
+                privilege_requirement);
+    copy_string(result->evidence_level, sizeof(result->evidence_level),
+                evidence_level);
+    copy_string(result->timer_evidence_level,
+                sizeof(result->timer_evidence_level),
+                timer_evidence_level);
+    copy_string(result->execution_evidence_level,
+                sizeof(result->execution_evidence_level),
+                execution_evidence_level);
+    copy_string(result->unsupported_reason,
+                sizeof(result->unsupported_reason),
+                unsupported_reason);
+    copy_string(result->limitations, sizeof(result->limitations),
+                limitations);
 }
 
 static bool select_platform_candidate(vis_platform_profile_t* profile,
@@ -286,25 +338,17 @@ static vis_probe_status_t run_posix_generic_backend(vis_probe_report_t* report) 
 
     fill_common_execution_profile(&report->execution_profile,
                                   &report->platform_profile);
-    copy_string(report->probe_result.selected_backend,
-                sizeof(report->probe_result.selected_backend),
-                "posix_generic");
-    copy_string(report->probe_result.selected_time_source,
-                sizeof(report->probe_result.selected_time_source),
-                report->platform_profile.selected_time_source);
-    report->probe_result.time_source_monotonic =
-        report->platform_profile.time_source_monotonic;
-    report->probe_result.time_source_read_overhead_ns =
-        report->platform_profile.time_source_read_overhead_ns;
-    copy_string(report->probe_result.privilege_requirement,
-                sizeof(report->probe_result.privilege_requirement),
-                "none");
-    copy_string(report->probe_result.evidence_level,
-                sizeof(report->probe_result.evidence_level),
-                "portable_user_space");
-    copy_string(report->probe_result.limitations,
-                sizeof(report->probe_result.limitations),
-                report->platform_profile.limitations);
+    fill_probe_result(&report->probe_result,
+                      "posix_generic",
+                      "selected",
+                      "Portable POSIX timer path is active on this host.",
+                      "none",
+                      "portable_user_space",
+                      report->platform_profile.time_source_evidence_level,
+                      "portable_user_space",
+                      "none",
+                      report->platform_profile.limitations,
+                      &report->platform_profile);
     return vis_probe_status_t::VIS_PROBE_OK;
 }
 
@@ -329,25 +373,17 @@ static vis_probe_status_t run_arm_generic_timer_backend(
 
     fill_common_execution_profile(&report->execution_profile,
                                   &report->platform_profile);
-    copy_string(report->probe_result.selected_backend,
-                sizeof(report->probe_result.selected_backend),
-                "arm_generic_timer");
-    copy_string(report->probe_result.selected_time_source,
-                sizeof(report->probe_result.selected_time_source),
-                report->platform_profile.selected_time_source);
-    report->probe_result.time_source_monotonic =
-        report->platform_profile.time_source_monotonic;
-    report->probe_result.time_source_read_overhead_ns =
-        report->platform_profile.time_source_read_overhead_ns;
-    copy_string(report->probe_result.privilege_requirement,
-                sizeof(report->probe_result.privilege_requirement),
-                "none_for_el0_timer_read");
-    copy_string(report->probe_result.evidence_level,
-                sizeof(report->probe_result.evidence_level),
-                "arm_generic_timer_evidence");
-    copy_string(report->probe_result.limitations,
-                sizeof(report->probe_result.limitations),
-                report->platform_profile.limitations);
+    fill_probe_result(&report->probe_result,
+                      "arm_generic_timer",
+                      "selected",
+                      "AArch64 EL0 generic timer path is active on this host.",
+                      "none_for_el0_timer_read",
+                      "arm_generic_timer_evidence",
+                      report->platform_profile.time_source_evidence_level,
+                      "portable_user_space",
+                      "none",
+                      report->platform_profile.limitations,
+                      &report->platform_profile);
     return vis_probe_status_t::VIS_PROBE_OK;
 #else
     (void)report;
@@ -374,31 +410,199 @@ static vis_probe_status_t run_linux_x86_backend(vis_probe_report_t* report) {
 
     fill_common_execution_profile(&report->execution_profile,
                                   &report->platform_profile);
-    copy_string(report->probe_result.selected_backend,
-                sizeof(report->probe_result.selected_backend),
-                "linux_x86_rdtscp_msr");
-    copy_string(report->probe_result.selected_time_source,
-                sizeof(report->probe_result.selected_time_source),
-                report->platform_profile.selected_time_source);
-    report->probe_result.time_source_monotonic =
-        report->platform_profile.time_source_monotonic;
-    report->probe_result.time_source_read_overhead_ns =
-        report->platform_profile.time_source_read_overhead_ns;
-    copy_string(report->probe_result.privilege_requirement,
-                sizeof(report->probe_result.privilege_requirement),
-                "root_or_cap_sys_rawio_for_msr");
-    copy_string(report->probe_result.evidence_level,
-                sizeof(report->probe_result.evidence_level),
-                "linux_x86_rich_evidence");
-    copy_string(report->probe_result.limitations,
-                sizeof(report->probe_result.limitations),
-                report->platform_profile.limitations);
+    fill_probe_result(&report->probe_result,
+                      "linux_x86_rdtscp_msr",
+                      "selected",
+                      "Linux/x86 RDTSCP timing path is active on this host.",
+                      "root_or_cap_sys_rawio_for_msr",
+                      "linux_x86_rich_evidence",
+                      report->platform_profile.time_source_evidence_level,
+                      "portable_user_space",
+                      "none",
+                      report->platform_profile.limitations,
+                      &report->platform_profile);
     return vis_probe_status_t::VIS_PROBE_OK;
 #else
     (void)report;
     return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
 #endif
 }
+
+static void override_execution_surface(vis_execution_profile_t* execution,
+                                       const char* partition_model,
+                                       const char* scheduler_surface,
+                                       const char* posix_surface,
+                                       const char* arinc653_surface,
+                                       const char* autosar_surface,
+                                       const char* hypervisor_surface,
+                                       const char* runtime_isolation_model) {
+    if (execution == nullptr) return;
+
+    if (partition_model != nullptr) {
+        copy_string(execution->partition_model,
+                    sizeof(execution->partition_model),
+                    partition_model);
+    }
+    if (scheduler_surface != nullptr) {
+        copy_string(execution->scheduler_surface,
+                    sizeof(execution->scheduler_surface),
+                    scheduler_surface);
+    }
+    if (posix_surface != nullptr) {
+        copy_string(execution->posix_surface,
+                    sizeof(execution->posix_surface),
+                    posix_surface);
+    }
+    if (arinc653_surface != nullptr) {
+        copy_string(execution->arinc653_surface,
+                    sizeof(execution->arinc653_surface),
+                    arinc653_surface);
+    }
+    if (autosar_surface != nullptr) {
+        copy_string(execution->autosar_adaptive_surface,
+                    sizeof(execution->autosar_adaptive_surface),
+                    autosar_surface);
+    }
+    if (hypervisor_surface != nullptr) {
+        copy_string(execution->hypervisor_surface,
+                    sizeof(execution->hypervisor_surface),
+                    hypervisor_surface);
+    }
+    if (runtime_isolation_model != nullptr) {
+        copy_string(execution->runtime_isolation_model,
+                    sizeof(execution->runtime_isolation_model),
+                    runtime_isolation_model);
+    }
+}
+
+static vis_probe_status_t emit_contract_only_stub(
+    vis_probe_report_t* report,
+    const char* backend_name,
+    const char* backend_status_reason,
+    const char* unsupported_reason,
+    const char* partition_model,
+    const char* scheduler_surface,
+    const char* posix_surface,
+    const char* arinc653_surface,
+    const char* autosar_surface,
+    const char* hypervisor_surface,
+    const char* runtime_isolation_model
+) {
+    if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
+    if (vis_platform_detect_profile(&report->platform_profile) < 0) {
+        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
+    }
+
+    fill_common_execution_profile(&report->execution_profile,
+                                  &report->platform_profile);
+    override_execution_surface(&report->execution_profile,
+                               partition_model,
+                               scheduler_surface,
+                               posix_surface,
+                               arinc653_surface,
+                               autosar_surface,
+                               hypervisor_surface,
+                               runtime_isolation_model);
+    copy_string(report->execution_profile.portability_tier,
+                sizeof(report->execution_profile.portability_tier),
+                "rtos_contract_stub");
+
+    fill_probe_result(&report->probe_result,
+                      backend_name,
+                      "recognized_api_missing",
+                      backend_status_reason,
+                      "target_vendor_api_required",
+                      "contract_only",
+                      report->platform_profile.time_source_evidence_level,
+                      "contract_only",
+                      unsupported_reason,
+                      "Requested RTOS-oriented backend was recognized, but "
+                      "this hosted build does not expose the target runtime "
+                      "API needed for partition/scheduler attestation.",
+                      &report->platform_profile);
+    copy_string(report->platform_profile.claim_level,
+                sizeof(report->platform_profile.claim_level),
+                "contract_only");
+    copy_string(report->platform_profile.limitations,
+                sizeof(report->platform_profile.limitations),
+                report->probe_result.limitations);
+    return vis_probe_status_t::VIS_PROBE_OK;
+}
+
+static vis_probe_status_t run_arinc653_partition_backend(
+    vis_probe_report_t* report
+) {
+    return emit_contract_only_stub(
+        report,
+        "arinc653_partition_probe",
+        "ARINC 653 partition services are not available on this hosted Linux "
+        "build.",
+        "target_runtime_api_missing: arinc653_partition_services",
+        "arinc653_partition_contract",
+        "partition_schedule_contract_only",
+        "not_claimed",
+        "contract_recognized_api_missing",
+        "not_claimed",
+        "not_claimed",
+        "partition_isolation_not_attested");
+}
+
+static vis_probe_status_t run_posix_pse53_backend(vis_probe_report_t* report) {
+    return emit_contract_only_stub(
+        report,
+        "posix_pse53_probe",
+        "POSIX PSE53 scheduling and timer APIs are not exposed as a distinct "
+        "target profile on this hosted build.",
+        "target_runtime_api_missing: posix_pse53_profile",
+        "process_contract_only",
+        "pse53_contract_only",
+        "pse53_contract_recognized_api_missing",
+        "not_claimed",
+        "not_claimed",
+        "not_claimed",
+        "rtos_runtime_isolation_not_attested");
+}
+
+static vis_probe_status_t run_autosar_adaptive_backend(
+    vis_probe_report_t* report
+) {
+    return emit_contract_only_stub(
+        report,
+        "autosar_adaptive_probe",
+        "AUTOSAR Adaptive execution management services are not available on "
+        "this hosted build.",
+        "target_runtime_api_missing: autosar_adaptive_execution_management",
+        "adaptive_process_contract",
+        "execution_management_contract_only",
+        "posix_like_contract_only",
+        "not_claimed",
+        "contract_recognized_api_missing",
+        "not_claimed",
+        "adaptive_runtime_isolation_not_attested");
+}
+
+static vis_probe_status_t run_hypervisor_partition_backend(
+    vis_probe_report_t* report
+) {
+    return emit_contract_only_stub(
+        report,
+        "hypervisor_partition_probe",
+        "Partition scheduler or virtual-machine control APIs are not exposed "
+        "to this hosted user-space build.",
+        "target_runtime_api_missing: hypervisor_partition_control",
+        "virtual_partition_contract",
+        "hypervisor_schedule_contract_only",
+        "not_claimed",
+        "not_claimed",
+        "not_claimed",
+        "contract_recognized_api_missing",
+        "hypervisor_partition_isolation_not_attested");
+}
+
+struct vis_probe_backend_descriptor_t {
+    vis_probe_backend_hint_t hint;
+    vis_probe_status_t (*run)(vis_probe_report_t* report);
+};
 
 vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
                                  vis_probe_report_t* report) {
@@ -416,29 +620,39 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
     generate_uuid(report->report_id, sizeof(report->report_id));
     generate_timestamp(report->generated_at, sizeof(report->generated_at));
 
-    vis_probe_status_t status = vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
-    switch (active->backend_hint) {
-        case vis_probe_backend_hint_t::POSIX_GENERIC:
-            status = run_posix_generic_backend(report);
-            break;
-        case vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR:
-            status = run_linux_x86_backend(report);
-            break;
-        case vis_probe_backend_hint_t::ARM_GENERIC_TIMER:
-            status = run_arm_generic_timer_backend(report);
-            break;
-        case vis_probe_backend_hint_t::AUTO:
-        default:
-            status = run_linux_x86_backend(report);
+    const vis_probe_backend_descriptor_t descriptors[] = {
+        {vis_probe_backend_hint_t::POSIX_GENERIC, run_posix_generic_backend},
+        {vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR, run_linux_x86_backend},
+        {vis_probe_backend_hint_t::ARM_GENERIC_TIMER, run_arm_generic_timer_backend},
+        {vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE, run_arinc653_partition_backend},
+        {vis_probe_backend_hint_t::POSIX_PSE53_PROBE, run_posix_pse53_backend},
+        {vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE, run_autosar_adaptive_backend},
+        {vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE, run_hypervisor_partition_backend},
+    };
+
+    auto run_backend = [&](vis_probe_backend_hint_t hint) {
+        for (const vis_probe_backend_descriptor_t& descriptor : descriptors) {
+            if (descriptor.hint == hint) {
+                return descriptor.run(report);
+            }
+        }
+        return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
+    };
+
+    vis_probe_status_t status =
+        vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
+    if (active->backend_hint == vis_probe_backend_hint_t::AUTO) {
+        status = run_linux_x86_backend(report);
 #if defined(__aarch64__)
-            if (status != vis_probe_status_t::VIS_PROBE_OK) {
-                status = run_arm_generic_timer_backend(report);
-            }
+        if (status != vis_probe_status_t::VIS_PROBE_OK) {
+            status = run_arm_generic_timer_backend(report);
+        }
 #endif
-            if (status != vis_probe_status_t::VIS_PROBE_OK) {
-                status = run_posix_generic_backend(report);
-            }
-            break;
+        if (status != vis_probe_status_t::VIS_PROBE_OK) {
+            status = run_posix_generic_backend(report);
+        }
+    } else {
+        status = run_backend(active->backend_hint);
     }
 
     if (status != vis_probe_status_t::VIS_PROBE_OK) {
@@ -505,10 +719,16 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
     std::string interrupt_visibility = json_escape(e->interrupt_visibility);
     std::string memory_visibility = json_escape(e->memory_visibility);
     std::string backend = json_escape(r->selected_backend);
+    std::string backend_status = json_escape(r->backend_status);
+    std::string backend_status_reason = json_escape(r->backend_status_reason);
     std::string probe_selected_time_source =
         json_escape(r->selected_time_source);
     std::string privilege_requirement = json_escape(r->privilege_requirement);
     std::string evidence_level = json_escape(r->evidence_level);
+    std::string timer_evidence_level = json_escape(r->timer_evidence_level);
+    std::string execution_evidence_level =
+        json_escape(r->execution_evidence_level);
+    std::string unsupported_reason = json_escape(r->unsupported_reason);
     std::string probe_limitations = json_escape(r->limitations);
 
     std::string candidate_json;
@@ -593,10 +813,15 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
         "    },\n"
         "    \"probe_result\": {\n"
         "      \"selected_backend\": \"%s\",\n"
+        "      \"backend_status\": \"%s\",\n"
+        "      \"backend_status_reason\": \"%s\",\n"
         "      \"selected_time_source\": \"%s\",\n"
         "      \"time_source_monotonic\": %s,\n"
         "      \"time_source_read_overhead_ns\": %.1f,\n"
-        "      \"privilege_requirement\": \"%s\"\n"
+        "      \"privilege_requirement\": \"%s\",\n"
+        "      \"timer_evidence_level\": \"%s\",\n"
+        "      \"execution_evidence_level\": \"%s\",\n"
+        "      \"unsupported_reason\": \"%s\"\n"
         "    }\n"
         "  }\n"
         "}\n",
@@ -648,10 +873,15 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
         interrupt_visibility.c_str(),
         memory_visibility.c_str(),
         backend.c_str(),
+        backend_status.c_str(),
+        backend_status_reason.c_str(),
         probe_selected_time_source.c_str(),
         r->time_source_monotonic ? "true" : "false",
         r->time_source_read_overhead_ns,
-        privilege_requirement.c_str());
+        privilege_requirement.c_str(),
+        timer_evidence_level.c_str(),
+        execution_evidence_level.c_str(),
+        unsupported_reason.c_str());
 
     char* out = static_cast<char*>(std::malloc(json.size() + 1));
     if (out == nullptr) return nullptr;
@@ -678,6 +908,7 @@ void vis_probe_report_print_summary(const vis_probe_report_t* report) {
     std::printf("   OS/env      : %s / %s\n", p->os_family, p->environment);
     std::printf("   ABI bits    : %u\n", p->abi_bits);
     std::printf("   Backend     : %s\n", r->selected_backend);
+    std::printf("   Status      : %s\n", r->backend_status);
     std::printf("   Time source : %s (%s)\n",
                 p->selected_time_source, p->time_source_evidence_level);
     std::printf("   Claim level : %s\n", r->evidence_level);
@@ -692,9 +923,16 @@ void vis_probe_report_print_summary(const vis_probe_report_t* report) {
     std::printf("   Affinity    : %s\n", e->affinity_surface);
     std::printf("----------------------------------------\n");
     std::printf(" Probe result\n");
+    std::printf("   Timer evid. : %s\n", r->timer_evidence_level);
+    std::printf("   Exec evid.  : %s\n", r->execution_evidence_level);
     std::printf("   Monotonic   : %s\n", r->time_source_monotonic ? "yes" : "no");
     std::printf("   Overhead    : %.1f ns\n", r->time_source_read_overhead_ns);
     std::printf("   Privilege   : %s\n", r->privilege_requirement);
+    std::printf("   Reason      : %s\n", r->backend_status_reason);
+    if (std::strcmp(r->unsupported_reason, "none") != 0 &&
+        r->unsupported_reason[0] != '\0') {
+        std::printf("   Unsupported : %s\n", r->unsupported_reason);
+    }
     std::printf("   Limitations : %s\n", r->limitations);
     std::printf("========================================\n\n");
 }

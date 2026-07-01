@@ -63,6 +63,8 @@ Public docs:
 
 - [Claim boundaries](vis-jitter/docs/claim-boundaries.md)
 - [Portable platform foundation](vis-jitter/docs/portable-platform-foundation.md)
+- [RTOS probe architecture](vis-jitter/docs/rtos-probe-architecture.md)
+- [RTOS capability matrix](vis-jitter/docs/rtos-capability-matrix.md)
 - [Report package](vis-jitter/docs/report-package.md)
 - [Doctor output](vis-jitter/docs/doctor-output.md)
 - [Community testing](docs/community-testing.md)
@@ -136,6 +138,10 @@ Available probe backends today:
 - `posix_generic`: portable user-space fallback
 - `linux_x86_rdtscp_msr`: richer Linux/x86 timer evidence
 - `arm_generic_timer`: AArch64 generic timer evidence
+- `arinc653_partition_probe`: contract-only stub for partitioned RTOS targets
+- `posix_pse53_probe`: contract-only stub for POSIX PSE53 style targets
+- `autosar_adaptive_probe`: contract-only stub for Adaptive AUTOSAR targets
+- `hypervisor_partition_probe`: contract-only stub for partitioned hypervisor targets
 - `auto`: prefers architecture-specific evidence, then falls back safely
 
 ## Report Bundle Smoke

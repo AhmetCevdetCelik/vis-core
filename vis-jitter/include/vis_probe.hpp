@@ -27,6 +27,10 @@ enum class vis_probe_backend_hint_t : int {
     POSIX_GENERIC = 1,
     LINUX_X86_RDTSCP_MSR = 2,
     ARM_GENERIC_TIMER = 3,
+    ARINC653_PARTITION_PROBE = 4,
+    POSIX_PSE53_PROBE = 5,
+    AUTOSAR_ADAPTIVE_PROBE = 6,
+    HYPERVISOR_PARTITION_PROBE = 7,
 };
 
 struct vis_execution_profile_t {
@@ -48,11 +52,16 @@ struct vis_execution_profile_t {
 
 struct vis_probe_result_t {
     char selected_backend[48];
+    char backend_status[48];
+    char backend_status_reason[160];
     char selected_time_source[64];
     bool time_source_monotonic;
     double time_source_read_overhead_ns;
     char privilege_requirement[48];
     char evidence_level[48];
+    char timer_evidence_level[48];
+    char execution_evidence_level[48];
+    char unsupported_reason[160];
     char limitations[256];
 };
 

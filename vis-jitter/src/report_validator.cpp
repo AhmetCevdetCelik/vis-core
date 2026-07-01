@@ -302,6 +302,11 @@ static void validate_probe_report_semantics(
         result->errors.push_back("missing required field: evidence_level");
         return;
     }
+    extract_json_string_field(json, "backend_status", &result->backend_status);
+    extract_json_string_field(json, "timer_evidence_level",
+                              &result->timer_evidence_level);
+    extract_json_string_field(json, "execution_evidence_level",
+                              &result->execution_evidence_level);
 
     if (!vis_probe_evidence_level_is_valid(result->evidence_level)) {
         result->errors.push_back("invalid probe evidence_level: " +
@@ -322,6 +327,20 @@ static void validate_probe_report_semantics(
         result->errors.push_back(
             "arm_generic_timer_evidence must rely on arm_cntvct_el0");
     }
+    if (result->evidence_level == "contract_only" &&
+        result->backend_status == "selected") {
+        result->errors.push_back(
+            "contract_only probe evidence cannot claim backend_status selected");
+    }
+    if ((result->evidence_level == "linux_x86_rich_evidence" ||
+         result->evidence_level == "arm_generic_timer_evidence" ||
+         result->evidence_level == "portable_user_space") &&
+        !result->backend_status.empty() &&
+        result->backend_status != "selected") {
+        result->warnings.push_back(
+            "runtime evidence level is strong, but backend_status is not "
+            "selected");
+    }
 }
 
 bool vis_policy_evidence_level_is_valid(const std::string& level) {
@@ -333,7 +352,10 @@ bool vis_policy_evidence_level_is_valid(const std::string& level) {
 bool vis_probe_evidence_level_is_valid(const std::string& level) {
     return level == "portable_user_space" ||
            level == "linux_x86_rich_evidence" ||
-           level == "arm_generic_timer_evidence";
+           level == "arm_generic_timer_evidence" ||
+           level == "contract_only" ||
+           level == "rtos_execution_surface" ||
+           level == "hypervisor_partition_hint";
 }
 
 std::string vis_policy_evidence_level_semantics(const std::string& level) {
@@ -365,6 +387,18 @@ std::string vis_probe_evidence_level_semantics(const std::string& level) {
     if (level == "arm_generic_timer_evidence") {
         return "Probe selected ARM generic timer evidence while leaving RTOS "
                "partition scheduling and interrupt attestation out of scope.";
+    }
+    if (level == "contract_only") {
+        return "Probe recognized a target backend contract, but the runtime "
+               "API needed for target-specific attestation was unavailable.";
+    }
+    if (level == "rtos_execution_surface") {
+        return "Probe recorded target execution-surface evidence, but "
+               "timing/isolation claims still depend on the target backend.";
+    }
+    if (level == "hypervisor_partition_hint") {
+        return "Probe observed hypervisor or partition-management surfaces, "
+               "but did not prove partition isolation.";
     }
     return "Unknown probe evidence level.";
 }

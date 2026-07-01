@@ -17,7 +17,9 @@ static void print_usage(const char* argv0) {
                  "Usage: %s [OPTIONS]\n"
                  "\n"
                  "Options:\n"
-                 "  --backend <auto|posix_generic|linux_x86_rdtscp_msr|arm_generic_timer>\n"
+                 "  --backend <auto|posix_generic|linux_x86_rdtscp_msr|arm_generic_timer|\n"
+                 "             arinc653_partition_probe|posix_pse53_probe|\n"
+                 "             autosar_adaptive_probe|hypervisor_partition_probe>\n"
                  "                         Probe backend selection (default: auto)\n"
                  "  --output  <file.json>  Save JSON report to file\n"
                  "  --help                 Show this message\n"
@@ -43,6 +45,22 @@ static bool parse_backend(const char* text, vis_probe_backend_hint_t* out) {
     }
     if (std::strcmp(text, "arm_generic_timer") == 0) {
         *out = vis_probe_backend_hint_t::ARM_GENERIC_TIMER;
+        return true;
+    }
+    if (std::strcmp(text, "arinc653_partition_probe") == 0) {
+        *out = vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE;
+        return true;
+    }
+    if (std::strcmp(text, "posix_pse53_probe") == 0) {
+        *out = vis_probe_backend_hint_t::POSIX_PSE53_PROBE;
+        return true;
+    }
+    if (std::strcmp(text, "autosar_adaptive_probe") == 0) {
+        *out = vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE;
+        return true;
+    }
+    if (std::strcmp(text, "hypervisor_partition_probe") == 0) {
+        *out = vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE;
         return true;
     }
     return false;

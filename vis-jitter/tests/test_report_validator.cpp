@@ -70,7 +70,10 @@ int main() {
         "      \"execution_environment\": \"posix_user_space\"\n"
         "    },\n"
         "    \"probe_result\": {\n"
-        "      \"selected_backend\": \"posix_generic\"\n"
+        "      \"selected_backend\": \"posix_generic\",\n"
+        "      \"backend_status\": \"selected\",\n"
+        "      \"timer_evidence_level\": \"portable\",\n"
+        "      \"execution_evidence_level\": \"portable_user_space\"\n"
         "    },\n"
         "    \"evidence_level\": \"portable_user_space\"\n"
         "  }\n"
@@ -136,6 +139,7 @@ int main() {
         !vis_probe_evidence_level_is_valid("portable_user_space") ||
         !vis_probe_evidence_level_is_valid("linux_x86_rich_evidence") ||
         !vis_probe_evidence_level_is_valid("arm_generic_timer_evidence") ||
+        !vis_probe_evidence_level_is_valid("contract_only") ||
         vis_probe_evidence_level_is_valid("portable") ||
         vis_policy_evidence_level_semantics("attested").find("/proc") ==
             std::string::npos ||
@@ -144,8 +148,37 @@ int main() {
         vis_probe_evidence_level_semantics("linux_x86_rich_evidence").find(
             "RDTSCP") == std::string::npos ||
         vis_probe_evidence_level_semantics("arm_generic_timer_evidence").find(
-            "ARM generic timer") == std::string::npos) {
+            "ARM generic timer") == std::string::npos ||
+        vis_probe_evidence_level_semantics("contract_only").find(
+            "target backend contract") == std::string::npos) {
         std::fprintf(stderr, "[test] policy evidence semantics are wrong\n");
+        return 1;
+    }
+
+    const std::string contract_only_probe =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-probe 0.1.0\",\n"
+        "    \"platform_profile\": {\n"
+        "      \"selected_time_source\": \"x86_rdtscp\"\n"
+        "    },\n"
+        "    \"execution_profile\": {\n"
+        "      \"execution_environment\": \"linux_user_space\"\n"
+        "    },\n"
+        "    \"probe_result\": {\n"
+        "      \"selected_backend\": \"arinc653_partition_probe\",\n"
+        "      \"backend_status\": \"recognized_api_missing\",\n"
+        "      \"timer_evidence_level\": \"architecture_counter\",\n"
+        "      \"execution_evidence_level\": \"contract_only\"\n"
+        "    },\n"
+        "    \"evidence_level\": \"contract_only\"\n"
+        "  }\n"
+        "}\n";
+    if (!vis_report_validate_json(contract_only_probe, &result) ||
+        result.evidence_level != "contract_only" ||
+        result.backend_status != "recognized_api_missing") {
+        std::fprintf(stderr, "[test] contract-only probe was rejected\n");
         return 1;
     }
 

@@ -89,3 +89,8 @@ Each backend should provide:
 - privilege requirement,
 - evidence level,
 - limitations.
+
+See also:
+
+- [RTOS probe architecture](rtos-probe-architecture.md)
+- [RTOS capability matrix](rtos-capability-matrix.md)
