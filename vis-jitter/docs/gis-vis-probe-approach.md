@@ -17,6 +17,7 @@ Today that means:
 - whether scheduler and affinity surfaces are visible
 - whether privileged counters or Linux-only signals are visible
 - what evidence scope the report actually contains
+- which claims are still closed through explicit claim gates
 
 On Linux/x86, VIS can also emit richer hosted timing evidence through the
 Linux/x86 probe path.
@@ -46,6 +47,15 @@ explicit:
 
 This helps engineers ask the right question: what evidence do we really have
 for this runtime surface?
+
+VIS Core now carries explicit claim-gate fields so a report can say:
+
+- hosted evidence is present
+- target timer claim is still closed
+- target execution claim is still closed
+- temporal isolation support is supporting-only
+- WCET support is supporting-only
+- direct proof is not provided
 
 ## How It Supports WCET Work
 

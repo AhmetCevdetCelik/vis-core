@@ -41,6 +41,28 @@ bool vis_probe_surface_state_is_valid(const std::string& state) {
            state == "host_linux_runtime";
 }
 
+bool vis_probe_hosted_evidence_state_is_valid(const std::string& state) {
+    return state == "observed_host_runtime" ||
+           state == "not_observed";
+}
+
+bool vis_probe_target_claim_state_is_valid(const std::string& state) {
+    return state == "host_only" ||
+           state == "contract_only" ||
+           state == "target_attested";
+}
+
+bool vis_probe_support_state_is_valid(const std::string& state) {
+    return state == "supporting_only" ||
+           state == "target_attested" ||
+           state == "not_supported";
+}
+
+bool vis_probe_direct_claim_state_is_valid(const std::string& state) {
+    return state == "not_proven" ||
+           state == "target_specific_proof_required";
+}
+
 std::string vis_probe_backend_status_semantics(const std::string& status) {
     if (status == "selected") {
         return "Backend executed on this host and produced runtime evidence.";
@@ -92,4 +114,54 @@ std::string vis_probe_target_runtime_api_status_semantics(
         return "The target contract is not supported by the current build.";
     }
     return "Unknown target runtime API status.";
+}
+
+std::string vis_probe_hosted_evidence_state_semantics(
+    const std::string& state
+) {
+    if (state == "observed_host_runtime") {
+        return "The report contains evidence gathered from the current hosted runtime.";
+    }
+    if (state == "not_observed") {
+        return "The report does not claim hosted runtime observation.";
+    }
+    return "Unknown hosted evidence state.";
+}
+
+std::string vis_probe_target_claim_state_semantics(const std::string& state) {
+    if (state == "host_only") {
+        return "Evidence is limited to a hosted runtime and does not open a target claim.";
+    }
+    if (state == "contract_only") {
+        return "A target contract is modeled, but the target claim remains closed.";
+    }
+    if (state == "target_attested") {
+        return "A target-specific backend has attested this claim.";
+    }
+    return "Unknown target claim state.";
+}
+
+std::string vis_probe_support_state_semantics(const std::string& state) {
+    if (state == "supporting_only") {
+        return "The report may support analysis, but it is not direct proof.";
+    }
+    if (state == "target_attested") {
+        return "The report includes target-specific evidence for this analysis surface.";
+    }
+    if (state == "not_supported") {
+        return "The report does not support this analysis surface.";
+    }
+    return "Unknown support state.";
+}
+
+std::string vis_probe_direct_claim_state_semantics(
+    const std::string& state
+) {
+    if (state == "not_proven") {
+        return "The report does not directly prove the corresponding safety claim.";
+    }
+    if (state == "target_specific_proof_required") {
+        return "Direct proof requires target-specific evidence beyond this report.";
+    }
+    return "Unknown direct claim state.";
 }

@@ -80,6 +80,15 @@
       "timer_evidence_level": "architecture_counter",
       "execution_evidence_level": "portable_user_space",
       "unsupported_reason": "none"
+    },
+    "claim_gates": {
+      "hosted_evidence_state": "observed_host_runtime",
+      "target_timer_claim_state": "host_only",
+      "target_execution_claim_state": "host_only",
+      "temporal_isolation_state": "supporting_only",
+      "wcet_state": "supporting_only",
+      "direct_claim_state": "target_specific_proof_required",
+      "gate_reason": "Hosted runtime evidence supports analysis, but target timer, execution, temporal isolation, and WCET claims remain closed."
     }
   }
 }

@@ -22,6 +22,12 @@ struct vis_report_validation_result_t {
     std::string backend_status;
     std::string target_profile_family;
     std::string target_runtime_api_status;
+    std::string hosted_evidence_state;
+    std::string target_timer_claim_state;
+    std::string target_execution_claim_state;
+    std::string temporal_isolation_state;
+    std::string wcet_state;
+    std::string direct_claim_state;
     std::string control_level;
     std::vector<std::string> errors;
     std::vector<std::string> warnings;

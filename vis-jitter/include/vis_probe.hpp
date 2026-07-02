@@ -79,6 +79,16 @@ struct vis_target_contract_t {
     char target_limitations[256];
 };
 
+struct vis_claim_gates_t {
+    char hosted_evidence_state[48];
+    char target_timer_claim_state[48];
+    char target_execution_claim_state[48];
+    char temporal_isolation_state[48];
+    char wcet_state[48];
+    char direct_claim_state[48];
+    char gate_reason[256];
+};
+
 struct vis_probe_report_t {
     char schema_version[8];
     char report_id[40];
@@ -87,6 +97,7 @@ struct vis_probe_report_t {
     vis_platform_profile_t platform_profile;
     vis_target_contract_t target_contract;
     vis_execution_profile_t execution_profile;
+    vis_claim_gates_t claim_gates;
     vis_probe_result_t probe_result;
 };
 
