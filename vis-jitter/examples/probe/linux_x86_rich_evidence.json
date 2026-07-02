@@ -1,0 +1,99 @@
+{
+  "vis_probe_report": {
+    "schema_version": "0.1",
+    "report_id": "11111111-1111-4111-8111-111111111111",
+    "generated_at": "2026-07-02T12:00:00Z",
+    "generator": "vis-probe example",
+    "evidence_level": "linux_x86_rich_evidence",
+    "limitations": "Portable probe records timing-source evidence only; SMI-backed jitter measurement remains a vis-jitter workflow.",
+    "platform_profile": {
+      "profile_version": "0.1",
+      "arch": "x86_64",
+      "os_family": "linux",
+      "environment": "linux_user_space",
+      "abi_bits": 64,
+      "kernel_release": "6.8.0-example",
+      "platform_fingerprint": "demo-x86-linux",
+      "selected_time_source": "x86_rdtscp",
+      "time_source_evidence_level": "architecture_counter",
+      "time_source_read_overhead_ns": 36.5,
+      "time_source_monotonic": true,
+      "capabilities": {
+        "affinity_control": "pthread_affinity_available",
+        "timer_access_model": "user_space_arch_counter",
+        "scheduler_model": "linux_sched_attr_or_pthreads",
+        "partitioning_hint": "process_or_container_isolation",
+        "posix_profile": "posix_like_not_pse53_claimed",
+        "arinc653_surface": "not_present_in_hosted_linux_build",
+        "autosar_adaptive_surface": "posix_like_user_space_candidate",
+        "hypervisor_surface": "linux_sysfs_hypervisor_present",
+        "runtime_isolation_hint": "shared_host_scheduler_runtime",
+        "interrupt_evidence": "linux_proc_interrupts_optional",
+        "thermal_evidence": "linux_sysfs_optional",
+        "memory_policy": "linux_numa_optional",
+        "privileged_counters": "msr_requires_root_or_cap_sys_rawio"
+      },
+      "claim_level": "linux_x86_rich_evidence",
+      "limitations": "Hosted Linux/x86 evidence does not prove RTOS runtime behavior.",
+      "time_source_candidates": [
+        {
+          "name": "x86_rdtscp",
+          "available": true,
+          "monotonic": true,
+          "read_overhead_ns": 36.5,
+          "evidence_level": "architecture_counter",
+          "reason": "CPUID reports RDTSCP support; VIS can use the x86 TSC path."
+        },
+        {
+          "name": "posix_clock_monotonic",
+          "available": true,
+          "monotonic": true,
+          "read_overhead_ns": 54.3,
+          "evidence_level": "portable",
+          "reason": "Portable POSIX fallback timer available in user space."
+        }
+      ]
+    },
+    "target_contract": {
+      "target_profile_family": "hosted_linux_x86",
+      "target_timer_model": "x86_rdtscp",
+      "target_scheduler_model": "linux_sched_attr_or_pthreads",
+      "target_partition_model": "process_or_container_isolation",
+      "target_privilege_model": "msr_requires_root_or_cap_sys_rawio",
+      "target_runtime_api_status": "host_native",
+      "target_arinc653_surface": "not_claimed",
+      "target_posix_pse53_surface": "host_posix_like",
+      "target_autosar_adaptive_surface": "not_claimed",
+      "target_hypervisor_surface": "not_claimed",
+      "target_limitations": "Target contract matches the current hosted runtime."
+    },
+    "execution_profile": {
+      "execution_environment": "linux_user_space",
+      "partition_model": "process_or_container_isolation",
+      "scheduler_surface": "linux_sched_attr_or_pthreads",
+      "scheduling_scope": "process_local_user_space",
+      "affinity_surface": "pthread_affinity_available",
+      "thread_model": "single_process_threads",
+      "posix_surface": "posix_like_not_pse53_claimed",
+      "arinc653_surface": "not_present_in_hosted_linux_build",
+      "autosar_adaptive_surface": "posix_like_user_space_candidate",
+      "hypervisor_surface": "linux_sysfs_hypervisor_present",
+      "runtime_isolation_model": "shared_host_scheduler_runtime",
+      "portability_tier": "portable_probe_foundation",
+      "interrupt_visibility": "linux_proc_interrupts_optional",
+      "memory_visibility": "linux_numa_optional"
+    },
+    "probe_result": {
+      "selected_backend": "linux_x86_rdtscp_msr",
+      "backend_status": "selected",
+      "backend_status_reason": "Linux/x86 RDTSCP timing path is active on this host.",
+      "selected_time_source": "x86_rdtscp",
+      "time_source_monotonic": true,
+      "time_source_read_overhead_ns": 36.5,
+      "privilege_requirement": "root_or_cap_sys_rawio_for_msr",
+      "timer_evidence_level": "architecture_counter",
+      "execution_evidence_level": "portable_user_space",
+      "unsupported_reason": "none"
+    }
+  }
+}
