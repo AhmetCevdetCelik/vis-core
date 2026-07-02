@@ -26,11 +26,27 @@ Use before sharing evidence externally:
 - summarize
 - bundle
 
+## Probe Contracts
+
+See [probe/README.md](probe/README.md).
+
+Use when the question is:
+
+`Is this report hosted runtime evidence, an RTOS target contract, or a future target-runtime evidence shape?`
+
+Primary artifacts:
+
+- `examples/probe/linux_x86_rich_evidence.json`
+- `examples/probe/arm_generic_timer_evidence.json`
+- `examples/probe/arinc653_contract_only.json`
+
 ## Claim Boundaries
 
 Before sharing evidence externally, use:
 
 - [Claim boundaries](../docs/claim-boundaries.md)
+- [GIS probe approach](../docs/gis-vis-probe-approach.md)
+- [ARINC/PSE53 PoC plan](../docs/arinc-pse53-poc-plan.md)
 
 VIS Core examples are public evidence examples. Commercial pilot workflows,
 generic audit orchestration, profile store drift, and inference advisor flows

@@ -65,6 +65,8 @@ Public docs:
 - [Portable platform foundation](vis-jitter/docs/portable-platform-foundation.md)
 - [RTOS probe architecture](vis-jitter/docs/rtos-probe-architecture.md)
 - [RTOS capability matrix](vis-jitter/docs/rtos-capability-matrix.md)
+- [GIS probe approach](vis-jitter/docs/gis-vis-probe-approach.md)
+- [ARINC/PSE53 PoC plan](vis-jitter/docs/arinc-pse53-poc-plan.md)
 - [Report package](vis-jitter/docs/report-package.md)
 - [Doctor output](vis-jitter/docs/doctor-output.md)
 - [Community testing](docs/community-testing.md)
