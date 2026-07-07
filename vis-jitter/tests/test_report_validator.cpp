@@ -141,6 +141,22 @@ int main() {
         return 1;
     }
 
+    const std::string probe_with_nested_metadata =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"metadata\": {\n"
+        "      \"schema_version\": \"0.1\",\n"
+        "      \"generator\": \"vis-probe 0.1.0\"\n"
+        "    }\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(probe_with_nested_metadata, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] probe with nested metadata was accepted\n");
+        return 1;
+    }
+
     const std::string incomplete_probe =
         "{\n"
         "  \"vis_probe_report\": {\n"

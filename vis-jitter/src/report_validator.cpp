@@ -801,13 +801,28 @@ bool vis_report_validate_json(const std::string& json,
         result->errors.push_back("multiple VIS report root objects found");
     }
 
-    if (!extract_json_string_field(json,
-                                   "schema_version",
-                                   &result->schema_version)) {
+    size_t document_begin = json.find_first_not_of(" \t\r\n");
+    size_t document_end = 0;
+    json_member_t report;
+    const bool report_object_found =
+        !result->report_type.empty() && result->report_type != "ambiguous" &&
+        document_begin != std::string::npos && json[document_begin] == '{' &&
+        find_matching_json_delimiter(json, document_begin, '{', '}',
+                                     &document_end) &&
+        find_direct_json_member(json, document_begin, document_end,
+                                result->report_type, &report) &&
+        report.type == json_value_type_t::object;
+
+    if (!report_object_found ||
+        !extract_direct_json_string(json, report.value_begin, report.value_end,
+                                    "schema_version",
+                                    &result->schema_version)) {
         result->errors.push_back("missing string field: schema_version");
     }
 
-    if (!extract_json_string_field(json, "generator", &result->generator)) {
+    if (!report_object_found ||
+        !extract_direct_json_string(json, report.value_begin, report.value_end,
+                                    "generator", &result->generator)) {
         result->errors.push_back("missing string field: generator");
     }
 
