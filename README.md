@@ -61,6 +61,7 @@ Public tools:
 
 Public docs:
 
+- [GIS VIS probe approach](vis-jitter/docs/gis-vis-probe-approach.md)
 - [Claim boundaries](vis-jitter/docs/claim-boundaries.md)
 - [Portable platform foundation](vis-jitter/docs/portable-platform-foundation.md)
 - [RTOS probe architecture](vis-jitter/docs/rtos-probe-architecture.md)
@@ -134,6 +135,10 @@ make vis-probe
 ./vis-probe --backend auto --output probe.json
 ./vis-report-validate probe.json
 ```
+
+Probe example artifacts:
+
+- [Probe examples](vis-jitter/examples/probe/README.md)
 
 Available probe backends today:
 

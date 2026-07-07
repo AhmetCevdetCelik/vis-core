@@ -15,6 +15,18 @@ Primary tool:
 
 - `vis-doctor`
 
+## Probe
+
+See [probe/README.md](probe/README.md).
+
+Use when the question is:
+
+`What does VIS currently know about timing source evidence versus target RTOS contract evidence?`
+
+Primary tool:
+
+- `vis-probe`
+
 ## Report Packaging
 
 See [../docs/report-package.md](../docs/report-package.md).

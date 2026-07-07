@@ -1,9 +1,9 @@
 {
   "vis_probe_report": {
     "schema_version": "0.1",
-    "report_id": "11111111-1111-4111-8111-111111111111",
-    "generated_at": "2026-07-02T12:00:00Z",
-    "generator": "vis-probe example",
+    "report_id": "example-linux-x86-rich-evidence",
+    "generated_at": "2026-07-02T12:09:34Z",
+    "generator": "vis-probe 0.1.0",
     "evidence_level": "linux_x86_rich_evidence",
     "limitations": "Portable probe records timing-source evidence only; SMI-backed jitter measurement remains a vis-jitter workflow.",
     "platform_profile": {
@@ -12,11 +12,11 @@
       "os_family": "linux",
       "environment": "linux_user_space",
       "abi_bits": 64,
-      "kernel_release": "6.8.0-example",
-      "platform_fingerprint": "demo-x86-linux",
+      "kernel_release": "7.0.0-27-generic",
+      "platform_fingerprint": "b7f40924c6988b30",
       "selected_time_source": "x86_rdtscp",
       "time_source_evidence_level": "architecture_counter",
-      "time_source_read_overhead_ns": 36.5,
+      "time_source_read_overhead_ns": 61.8,
       "time_source_monotonic": true,
       "capabilities": {
         "affinity_control": "pthread_affinity_available",
@@ -34,24 +34,10 @@
         "privileged_counters": "msr_requires_root_or_cap_sys_rawio"
       },
       "claim_level": "linux_x86_rich_evidence",
-      "limitations": "Hosted Linux/x86 evidence does not prove RTOS runtime behavior.",
+      "limitations": "Portable probe records timing-source evidence only; SMI-backed jitter measurement remains a vis-jitter workflow.",
       "time_source_candidates": [
-        {
-          "name": "x86_rdtscp",
-          "available": true,
-          "monotonic": true,
-          "read_overhead_ns": 36.5,
-          "evidence_level": "architecture_counter",
-          "reason": "CPUID reports RDTSCP support; VIS can use the x86 TSC path."
-        },
-        {
-          "name": "posix_clock_monotonic",
-          "available": true,
-          "monotonic": true,
-          "read_overhead_ns": 54.3,
-          "evidence_level": "portable",
-          "reason": "Portable POSIX fallback timer available in user space."
-        }
+        {"name": "x86_rdtscp", "available": true, "monotonic": true, "read_overhead_ns": 61.8, "evidence_level": "architecture_counter", "reason": "CPUID reports RDTSCP support; VIS can use the x86 TSC path."},
+        {"name": "posix_clock_monotonic", "available": true, "monotonic": true, "read_overhead_ns": 60.2, "evidence_level": "portable", "reason": "Portable POSIX fallback timer available in user space."}
       ]
     },
     "target_contract": {
@@ -89,7 +75,7 @@
       "backend_status_reason": "Linux/x86 RDTSCP timing path is active on this host.",
       "selected_time_source": "x86_rdtscp",
       "time_source_monotonic": true,
-      "time_source_read_overhead_ns": 36.5,
+      "time_source_read_overhead_ns": 61.8,
       "privilege_requirement": "root_or_cap_sys_rawio_for_msr",
       "timer_evidence_level": "architecture_counter",
       "execution_evidence_level": "portable_user_space",
