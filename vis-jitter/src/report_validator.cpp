@@ -13,6 +13,7 @@
 
 #include <cctype>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <vector>
 
@@ -60,8 +61,13 @@ private:
         if (!consume('{')) return false;
         skip_whitespace();
         if (consume('}')) return true;
+        std::set<std::string> member_names;
         while (true) {
-            if (!parse_string()) return false;
+            std::string member_name;
+            if (!parse_string(&member_name) ||
+                !member_names.insert(member_name).second) {
+                return false;
+            }
             skip_whitespace();
             if (!consume(':') || !parse_value()) return false;
             skip_whitespace();
@@ -84,28 +90,93 @@ private:
         }
     }
 
-    bool parse_string() {
+    static void append_utf8(unsigned int code_point, std::string* value) {
+        if (code_point <= 0x7f) {
+            value->push_back(static_cast<char>(code_point));
+        } else if (code_point <= 0x7ff) {
+            value->push_back(static_cast<char>(0xc0 | (code_point >> 6)));
+            value->push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        } else if (code_point <= 0xffff) {
+            value->push_back(static_cast<char>(0xe0 | (code_point >> 12)));
+            value->push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3f)));
+            value->push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        } else {
+            value->push_back(static_cast<char>(0xf0 | (code_point >> 18)));
+            value->push_back(static_cast<char>(0x80 | ((code_point >> 12) & 0x3f)));
+            value->push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3f)));
+            value->push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        }
+    }
+
+    bool parse_hex_escape(unsigned int* value) {
+        unsigned int result = 0;
+        for (int i = 0; i < 4; i++) {
+            if (pos_ >= json_.size() ||
+                !std::isxdigit(static_cast<unsigned char>(json_[pos_]))) {
+                return false;
+            }
+            const char c = json_[pos_++];
+            result = (result << 4) |
+                     static_cast<unsigned int>(
+                         c >= '0' && c <= '9' ? c - '0' :
+                         c >= 'a' && c <= 'f' ? c - 'a' + 10 : c - 'A' + 10);
+        }
+        *value = result;
+        return true;
+    }
+
+    bool parse_string(std::string* value = nullptr) {
         if (!consume('"')) return false;
+        std::string decoded;
         while (pos_ < json_.size()) {
             const unsigned char c =
                 static_cast<unsigned char>(json_[pos_++]);
-            if (c == '"') return true;
+            if (c == '"') {
+                if (value != nullptr) *value = decoded;
+                return true;
+            }
             if (c < 0x20) return false;
-            if (c != '\\') continue;
+            if (c != '\\') {
+                decoded.push_back(static_cast<char>(c));
+                continue;
+            }
             if (pos_ >= json_.size()) return false;
             const char escaped = json_[pos_++];
             if (escaped == 'u') {
-                for (int i = 0; i < 4; i++) {
-                    if (pos_ >= json_.size() ||
-                        !std::isxdigit(static_cast<unsigned char>(json_[pos_]))) {
+                unsigned int code_point = 0;
+                if (!parse_hex_escape(&code_point)) return false;
+                if (code_point >= 0xd800 && code_point <= 0xdbff) {
+                    if (pos_ + 2 > json_.size() || json_[pos_] != '\\' ||
+                        json_[pos_ + 1] != 'u') {
                         return false;
                     }
-                    pos_++;
+                    pos_ += 2;
+                    unsigned int low = 0;
+                    if (!parse_hex_escape(&low) || low < 0xdc00 ||
+                        low > 0xdfff) {
+                        return false;
+                    }
+                    code_point = 0x10000 + ((code_point - 0xd800) << 10) +
+                                 (low - 0xdc00);
+                } else if (code_point >= 0xdc00 && code_point <= 0xdfff) {
+                    return false;
                 }
+                append_utf8(code_point, &decoded);
             } else if (escaped != '"' && escaped != '\\' && escaped != '/' &&
                        escaped != 'b' && escaped != 'f' && escaped != 'n' &&
                        escaped != 'r' && escaped != 't') {
                 return false;
+            } else {
+                static const char escaped_values[] = {
+                    '"', '\\', '/', '\b', '\f', '\n', '\r', '\t'};
+                static const char escaped_names[] = {
+                    '"', '\\', '/', 'b', 'f', 'n', 'r', 't'};
+                for (size_t i = 0; i < sizeof(escaped_names); i++) {
+                    if (escaped == escaped_names[i]) {
+                        decoded.push_back(escaped_values[i]);
+                        break;
+                    }
+                }
             }
         }
         return false;

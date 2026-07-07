@@ -112,6 +112,29 @@ int main() {
         return 1;
     }
 
+    const std::string duplicate_schema =
+        "{\"vis_mem_probe_report\":{"
+        "\"schema_version\":\"0.1\","
+        "\"schema_version\":\"9.9\","
+        "\"generator\":\"vis-mem-probe 0.1.0\"}}";
+    if (vis_report_validate_json(duplicate_schema, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] duplicate schema member was accepted\n");
+        return 1;
+    }
+
+    const std::string escaped_duplicate_member =
+        "{\"vis_mem_probe_report\":{"
+        "\"schema_version\":\"0.1\","
+        "\"schema\\u005fversion\":\"9.9\","
+        "\"generator\":\"vis-mem-probe 0.1.0\"}}";
+    if (vis_report_validate_json(escaped_duplicate_member, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] escaped duplicate member was accepted\n");
+        return 1;
+    }
+
     const std::string structurally_invalid_probe =
         "{\n"
         "  \"vis_probe_report\": {\n"
