@@ -179,6 +179,17 @@ static bool x86_rdtscp_supported() {
     return ((edx >> 27) & 1u) != 0;
 }
 
+static bool x86_invariant_tsc_supported() {
+    uint32_t eax = 0;
+    uint32_t ebx = 0;
+    uint32_t ecx = 0;
+    uint32_t edx = 0;
+    if (!__get_cpuid(0x80000007, &eax, &ebx, &ecx, &edx)) {
+        return false;
+    }
+    return ((edx >> 8) & 1u) != 0;
+}
+
 static inline uint64_t x86_rdtscp_read(uint32_t* aux) {
     uint32_t lo = 0;
     uint32_t hi = 0;
@@ -200,11 +211,20 @@ static void x86_rdtscp_read_once() {
     (void)x86_rdtscp_read(&aux);
 }
 
-static bool x86_rdtscp_monotonic() {
-    uint32_t aux = 0;
-    uint64_t a = x86_rdtscp_read(&aux);
-    uint64_t b = x86_rdtscp_read(&aux);
-    return b >= a;
+static bool x86_rdtscp_stable_on_current_cpu() {
+    uint32_t initial_aux = 0;
+    uint64_t previous = x86_rdtscp_read(&initial_aux);
+    constexpr uint32_t validation_reads = 1024;
+
+    for (uint32_t i = 0; i < validation_reads; i++) {
+        uint32_t aux = 0;
+        uint64_t current = x86_rdtscp_read(&aux);
+        if (aux != initial_aux || current < previous) {
+            return false;
+        }
+        previous = current;
+    }
+    return true;
 }
 #endif
 
@@ -282,22 +302,36 @@ static void add_arch_counter_candidate(vis_platform_profile_t* profile) {
 
 #if defined(__x86_64__) || defined(__i386__)
     copy_string(candidate->name, sizeof(candidate->name), "x86_rdtscp");
-    candidate->available = x86_rdtscp_supported();
+    const bool instruction_available = x86_rdtscp_supported();
+    const bool invariant_tsc = x86_invariant_tsc_supported();
+    const bool stable_read = instruction_available && invariant_tsc &&
+                             x86_rdtscp_stable_on_current_cpu();
+    candidate->available = stable_read;
     if (candidate->available) {
-        candidate->monotonic = x86_rdtscp_monotonic();
+        candidate->monotonic = true;
         candidate->read_overhead_ns =
             measure_read_overhead_ns(x86_rdtscp_read_once);
         copy_string(candidate->evidence_level, sizeof(candidate->evidence_level),
                     "architecture_counter");
         copy_string(candidate->reason, sizeof(candidate->reason),
-                    "CPUID reports RDTSCP support; VIS can use the x86 TSC path.");
+                    "CPUID reports RDTSCP and invariant TSC support; repeated "
+                    "reads were monotonic without CPU migration.");
     } else {
         candidate->monotonic = false;
         candidate->read_overhead_ns = 0.0;
         copy_string(candidate->evidence_level, sizeof(candidate->evidence_level),
                     "unavailable");
-        copy_string(candidate->reason, sizeof(candidate->reason),
-                    "CPUID does not report RDTSCP support.");
+        if (!instruction_available) {
+            copy_string(candidate->reason, sizeof(candidate->reason),
+                        "CPUID does not report RDTSCP support.");
+        } else if (!invariant_tsc) {
+            copy_string(candidate->reason, sizeof(candidate->reason),
+                        "CPUID does not report an invariant TSC.");
+        } else {
+            copy_string(candidate->reason, sizeof(candidate->reason),
+                        "RDTSCP validation observed CPU migration or a "
+                        "non-monotonic counter.");
+        }
     }
 #elif defined(__aarch64__)
     copy_string(candidate->name, sizeof(candidate->name), "arm_cntvct_el0");

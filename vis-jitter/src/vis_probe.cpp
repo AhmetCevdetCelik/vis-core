@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -144,12 +145,12 @@ static void generate_uuid(char* buf, size_t buf_size) {
 
 static void generate_timestamp(char* buf, size_t buf_size) {
     time_t now = time(nullptr);
-    struct tm* utc = gmtime(&now);
-    if (utc == nullptr) {
+    struct tm utc;
+    if (gmtime_r(&now, &utc) == nullptr) {
         std::snprintf(buf, buf_size, "unknown");
         return;
     }
-    strftime(buf, buf_size, "%Y-%m-%dT%H:%M:%SZ", utc);
+    strftime(buf, buf_size, "%Y-%m-%dT%H:%M:%SZ", &utc);
 }
 
 static void fill_probe_result(vis_probe_result_t* result,
@@ -694,15 +695,31 @@ static vis_probe_backend_descriptor_t backend_descriptors[16] = {
      "hypervisor_partition_probe", false, run_hypervisor_partition_backend},
 };
 static uint32_t backend_descriptor_count = 7;
+static constexpr uint32_t max_backend_descriptors = 16;
+static constexpr size_t max_backend_name_size = 128;
+static char owned_backend_names[max_backend_descriptors]
+                               [max_backend_name_size] = {};
+static std::mutex backend_registry_mutex;
+
+static uint32_t snapshot_backend_registry(
+    vis_probe_backend_descriptor_t* descriptors) {
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
+    const uint32_t count = backend_descriptor_count;
+    std::memcpy(descriptors, backend_descriptors,
+                count * sizeof(vis_probe_backend_descriptor_t));
+    return count;
+}
 
 const vis_probe_backend_descriptor_t* vis_probe_backend_registry(
     uint32_t* count) {
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
     if (count != nullptr) *count = backend_descriptor_count;
     return backend_descriptors;
 }
 
 const char* vis_probe_backend_name(vis_probe_backend_hint_t hint) {
     if (hint == vis_probe_backend_hint_t::AUTO) return "auto";
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
     for (uint32_t i = 0; i < backend_descriptor_count; i++) {
         if (backend_descriptors[i].hint == hint) {
             return backend_descriptors[i].name;
@@ -718,6 +735,7 @@ bool vis_probe_backend_parse(const char* name,
         *hint = vis_probe_backend_hint_t::AUTO;
         return true;
     }
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
     for (uint32_t i = 0; i < backend_descriptor_count; i++) {
         if (std::strcmp(name, backend_descriptors[i].name) == 0) {
             *hint = backend_descriptors[i].hint;
@@ -732,16 +750,23 @@ bool vis_probe_register_backend(
     if (descriptor == nullptr || descriptor->name == nullptr ||
         descriptor->name[0] == '\0' || descriptor->run == nullptr ||
         descriptor->hint == vis_probe_backend_hint_t::AUTO ||
-        backend_descriptor_count >= 16) {
+        std::strlen(descriptor->name) >= max_backend_name_size) {
         return false;
     }
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
+    if (backend_descriptor_count >= max_backend_descriptors) return false;
     for (uint32_t i = 0; i < backend_descriptor_count; i++) {
         if (backend_descriptors[i].hint == descriptor->hint ||
             std::strcmp(backend_descriptors[i].name, descriptor->name) == 0) {
             return false;
         }
     }
-    backend_descriptors[backend_descriptor_count++] = *descriptor;
+    const uint32_t slot = backend_descriptor_count;
+    copy_string(owned_backend_names[slot], sizeof(owned_backend_names[slot]),
+                descriptor->name);
+    backend_descriptors[slot] = *descriptor;
+    backend_descriptors[slot].name = owned_backend_names[slot];
+    backend_descriptor_count++;
     return true;
 }
 
@@ -774,10 +799,12 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
         return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
     }
 
+    vis_probe_backend_descriptor_t descriptors[max_backend_descriptors];
+    const uint32_t descriptor_count = snapshot_backend_registry(descriptors);
     auto run_backend = [&](vis_probe_backend_hint_t hint) {
-        for (uint32_t i = 0; i < backend_descriptor_count; i++) {
+        for (uint32_t i = 0; i < descriptor_count; i++) {
             const vis_probe_backend_descriptor_t& descriptor =
-                backend_descriptors[i];
+                descriptors[i];
             if (descriptor.hint == hint) {
                 return descriptor.run(services, report);
             }
@@ -788,9 +815,9 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
     vis_probe_status_t status =
         vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
     if (active->backend_hint == vis_probe_backend_hint_t::AUTO) {
-        for (uint32_t i = 0; i < backend_descriptor_count; i++) {
+        for (uint32_t i = 0; i < descriptor_count; i++) {
             const vis_probe_backend_descriptor_t& descriptor =
-                backend_descriptors[i];
+                descriptors[i];
             if (!descriptor.auto_candidate) continue;
             status = descriptor.run(services, report);
             if (status == vis_probe_status_t::VIS_PROBE_OK) {
