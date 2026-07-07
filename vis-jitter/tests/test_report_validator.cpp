@@ -89,6 +89,53 @@ int main() {
         return 1;
     }
 
+    const std::string structurally_invalid_probe =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-probe 0.1.0\",\n"
+        "    \"platform_profile\": null,\n"
+        "    \"execution_profile\": null,\n"
+        "    \"probe_result\": null,\n"
+        "    \"target_contract\": null,\n"
+        "    \"evidence_level\": \"portable_user_space\",\n"
+        "    \"misplaced\": {\n"
+        "      \"selected_time_source\": \"posix_clock_monotonic\",\n"
+        "      \"execution_environment\": \"posix_user_space\",\n"
+        "      \"selected_backend\": \"posix_generic\",\n"
+        "      \"backend_status\": \"selected\",\n"
+        "      \"timer_evidence_level\": \"portable\",\n"
+        "      \"execution_evidence_level\": \"portable_user_space\",\n"
+        "      \"target_profile_family\": \"hosted_posix\",\n"
+        "      \"target_runtime_api_status\": \"host_native\"\n"
+        "    }\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(structurally_invalid_probe, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] structurally invalid probe was accepted\n");
+        return 1;
+    }
+
+    const std::string incomplete_probe =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-probe 0.1.0\",\n"
+        "    \"platform_profile\": {\"selected_time_source\": \"posix_clock_monotonic\"},\n"
+        "    \"execution_profile\": {\"execution_environment\": \"posix_user_space\"},\n"
+        "    \"probe_result\": {\"selected_backend\": \"posix_generic\"},\n"
+        "    \"target_contract\": {\"target_profile_family\": \"hosted_posix\"},\n"
+        "    \"evidence_level\": \"portable_user_space\"\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(incomplete_probe, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] incomplete probe was accepted\n");
+        return 1;
+    }
+
     const std::string run_with_nested_policy =
         "{\n"
         "  \"vis_run_attestation\": {\n"
