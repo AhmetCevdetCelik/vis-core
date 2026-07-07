@@ -11,9 +11,156 @@
 #include "../include/report_schema.hpp"
 #include "../include/vis_probe_semantics.hpp"
 
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <vector>
+
+class json_syntax_parser_t {
+public:
+    explicit json_syntax_parser_t(const std::string& json) : json_(json) {}
+
+    bool parse() {
+        skip_whitespace();
+        if (!parse_value()) return false;
+        skip_whitespace();
+        return pos_ == json_.size();
+    }
+
+private:
+    void skip_whitespace() {
+        while (pos_ < json_.size() &&
+               (json_[pos_] == ' ' || json_[pos_] == '\t' ||
+                json_[pos_] == '\r' || json_[pos_] == '\n')) {
+            pos_++;
+        }
+    }
+
+    bool consume(char expected) {
+        if (pos_ >= json_.size() || json_[pos_] != expected) return false;
+        pos_++;
+        return true;
+    }
+
+    bool parse_value() {
+        skip_whitespace();
+        if (pos_ >= json_.size()) return false;
+        switch (json_[pos_]) {
+            case '{': return parse_object();
+            case '[': return parse_array();
+            case '"': return parse_string();
+            case 't': return parse_literal("true");
+            case 'f': return parse_literal("false");
+            case 'n': return parse_literal("null");
+            default: return parse_number();
+        }
+    }
+
+    bool parse_object() {
+        if (!consume('{')) return false;
+        skip_whitespace();
+        if (consume('}')) return true;
+        while (true) {
+            if (!parse_string()) return false;
+            skip_whitespace();
+            if (!consume(':') || !parse_value()) return false;
+            skip_whitespace();
+            if (consume('}')) return true;
+            if (!consume(',')) return false;
+            skip_whitespace();
+        }
+    }
+
+    bool parse_array() {
+        if (!consume('[')) return false;
+        skip_whitespace();
+        if (consume(']')) return true;
+        while (true) {
+            if (!parse_value()) return false;
+            skip_whitespace();
+            if (consume(']')) return true;
+            if (!consume(',')) return false;
+            skip_whitespace();
+        }
+    }
+
+    bool parse_string() {
+        if (!consume('"')) return false;
+        while (pos_ < json_.size()) {
+            const unsigned char c =
+                static_cast<unsigned char>(json_[pos_++]);
+            if (c == '"') return true;
+            if (c < 0x20) return false;
+            if (c != '\\') continue;
+            if (pos_ >= json_.size()) return false;
+            const char escaped = json_[pos_++];
+            if (escaped == 'u') {
+                for (int i = 0; i < 4; i++) {
+                    if (pos_ >= json_.size() ||
+                        !std::isxdigit(static_cast<unsigned char>(json_[pos_]))) {
+                        return false;
+                    }
+                    pos_++;
+                }
+            } else if (escaped != '"' && escaped != '\\' && escaped != '/' &&
+                       escaped != 'b' && escaped != 'f' && escaped != 'n' &&
+                       escaped != 'r' && escaped != 't') {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    bool parse_number() {
+        const size_t begin = pos_;
+        if (pos_ < json_.size() && json_[pos_] == '-') pos_++;
+        if (pos_ >= json_.size()) return false;
+        if (json_[pos_] == '0') {
+            pos_++;
+        } else if (json_[pos_] >= '1' && json_[pos_] <= '9') {
+            while (pos_ < json_.size() && std::isdigit(
+                       static_cast<unsigned char>(json_[pos_]))) {
+                pos_++;
+            }
+        } else {
+            return false;
+        }
+        if (pos_ < json_.size() && json_[pos_] == '.') {
+            pos_++;
+            const size_t fraction = pos_;
+            while (pos_ < json_.size() && std::isdigit(
+                       static_cast<unsigned char>(json_[pos_]))) {
+                pos_++;
+            }
+            if (pos_ == fraction) return false;
+        }
+        if (pos_ < json_.size() &&
+            (json_[pos_] == 'e' || json_[pos_] == 'E')) {
+            pos_++;
+            if (pos_ < json_.size() &&
+                (json_[pos_] == '+' || json_[pos_] == '-')) {
+                pos_++;
+            }
+            const size_t exponent = pos_;
+            while (pos_ < json_.size() && std::isdigit(
+                       static_cast<unsigned char>(json_[pos_]))) {
+                pos_++;
+            }
+            if (pos_ == exponent) return false;
+        }
+        return pos_ > begin;
+    }
+
+    bool parse_literal(const char* literal) {
+        const size_t length = std::char_traits<char>::length(literal);
+        if (json_.compare(pos_, length, literal) != 0) return false;
+        pos_ += length;
+        return true;
+    }
+
+    const std::string& json_;
+    size_t pos_ = 0;
+};
 
 static bool extract_json_string_field(const std::string& json,
                                       const std::string& field,
@@ -639,6 +786,11 @@ bool vis_report_validate_json(const std::string& json,
 
     if (json.empty()) {
         result->errors.push_back("input JSON is empty");
+        return false;
+    }
+
+    if (!json_syntax_parser_t(json).parse()) {
+        result->errors.push_back("input is not valid JSON");
         return false;
     }
 

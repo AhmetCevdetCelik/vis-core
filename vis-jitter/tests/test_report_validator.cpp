@@ -89,6 +89,29 @@ int main() {
         return 1;
     }
 
+    std::string missing_member_comma = probe;
+    const std::string comma_before_evidence =
+        "    },\n    \"evidence_level\"";
+    const size_t comma_position =
+        missing_member_comma.find(comma_before_evidence);
+    if (comma_position == std::string::npos) {
+        std::fprintf(stderr, "[test] malformed probe fixture was not found\n");
+        return 1;
+    }
+    missing_member_comma.erase(comma_position + 5, 1);
+    if (vis_report_validate_json(missing_member_comma, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] probe with missing comma was accepted\n");
+        return 1;
+    }
+
+    const std::string trailing_content = probe + "garbage";
+    if (vis_report_validate_json(trailing_content, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] probe with trailing content was accepted\n");
+        return 1;
+    }
+
     const std::string structurally_invalid_probe =
         "{\n"
         "  \"vis_probe_report\": {\n"
