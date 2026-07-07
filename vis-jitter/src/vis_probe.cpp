@@ -278,6 +278,7 @@ static bool select_platform_candidate(vis_platform_profile_t* profile,
     for (uint32_t i = 0; i < profile->candidate_count && i < 4; i++) {
         const vis_time_source_candidate_t* candidate = &profile->candidates[i];
         if (std::strcmp(candidate->name, candidate_name) != 0) continue;
+        if (!candidate->available || !candidate->monotonic) return false;
 
         copy_string(profile->selected_time_source,
                     sizeof(profile->selected_time_source),

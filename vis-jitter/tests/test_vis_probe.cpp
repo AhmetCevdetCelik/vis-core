@@ -89,10 +89,26 @@ int main() {
         vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR};
     vis_probe_report_t x86_report;
     status = vis_probe_run(&x86_config, &x86_report);
-    if (status != vis_probe_status_t::VIS_PROBE_OK ||
-        std::strcmp(x86_report.probe_result.selected_backend,
-                    "linux_x86_rdtscp_msr") != 0) {
-        std::printf("[test] FAILED: x86 backend should work on x86.\n");
+    bool rdtscp_usable = false;
+    for (uint32_t i = 0; i < x86_report.platform_profile.candidate_count; i++) {
+        const vis_time_source_candidate_t& candidate =
+            x86_report.platform_profile.candidates[i];
+        if (std::strcmp(candidate.name, "x86_rdtscp") == 0) {
+            rdtscp_usable = candidate.available && candidate.monotonic;
+        }
+    }
+    if (rdtscp_usable &&
+        (status != vis_probe_status_t::VIS_PROBE_OK ||
+         std::strcmp(x86_report.probe_result.selected_backend,
+                     "linux_x86_rdtscp_msr") != 0)) {
+        std::printf("[test] FAILED: usable RDTSCP backend was not selected.\n");
+        return 1;
+    }
+    if (!rdtscp_usable &&
+        (status != vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE ||
+         std::strcmp(auto_report.probe_result.selected_backend,
+                     "posix_generic") != 0)) {
+        std::printf("[test] FAILED: unavailable RDTSCP should fall back to POSIX.\n");
         return 1;
     }
 #elif defined(__aarch64__)
@@ -100,12 +116,23 @@ int main() {
         vis_probe_backend_hint_t::ARM_GENERIC_TIMER};
     vis_probe_report_t arm_report;
     status = vis_probe_run(&arm_config, &arm_report);
-    if (status != vis_probe_status_t::VIS_PROBE_OK ||
-        std::strcmp(arm_report.probe_result.selected_backend,
-                    "arm_generic_timer") != 0 ||
-        std::strcmp(arm_report.probe_result.evidence_level,
-                    "arm_generic_timer_evidence") != 0) {
-        std::printf("[test] FAILED: ARM backend should work on AArch64.\n");
+    if (status == vis_probe_status_t::VIS_PROBE_OK &&
+        (std::strcmp(arm_report.probe_result.selected_backend,
+                     "arm_generic_timer") != 0 ||
+         std::strcmp(arm_report.probe_result.evidence_level,
+                     "arm_generic_timer_evidence") != 0)) {
+        std::printf("[test] FAILED: available ARM backend fields are wrong.\n");
+        return 1;
+    }
+    if (status != vis_probe_status_t::VIS_PROBE_OK &&
+        status != vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE) {
+        std::printf("[test] FAILED: inaccessible ARM timer should be unavailable.\n");
+        return 1;
+    }
+    if (status == vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE &&
+        std::strcmp(auto_report.probe_result.selected_backend,
+                    "posix_generic") != 0) {
+        std::printf("[test] FAILED: inaccessible ARM timer should fall back to POSIX.\n");
         return 1;
     }
 #endif
