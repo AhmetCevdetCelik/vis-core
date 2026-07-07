@@ -278,6 +278,7 @@ static bool select_platform_candidate(vis_platform_profile_t* profile,
     for (uint32_t i = 0; i < profile->candidate_count && i < 4; i++) {
         const vis_time_source_candidate_t* candidate = &profile->candidates[i];
         if (std::strcmp(candidate->name, candidate_name) != 0) continue;
+        if (!candidate->available || !candidate->monotonic) return false;
 
         copy_string(profile->selected_time_source,
                     sizeof(profile->selected_time_source),
@@ -397,9 +398,6 @@ static void fill_host_native_target_contract(
 
 static vis_probe_status_t run_posix_generic_backend(vis_probe_report_t* report) {
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
-    if (vis_platform_detect_profile(&report->platform_profile) < 0) {
-        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
-    }
 
     if (!select_platform_candidate(
             &report->platform_profile,
@@ -434,9 +432,6 @@ static vis_probe_status_t run_arm_generic_timer_backend(
     vis_probe_report_t* report
 ) {
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
-    if (vis_platform_detect_profile(&report->platform_profile) < 0) {
-        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
-    }
 
 #if defined(__aarch64__)
     if (!select_platform_candidate(
@@ -474,11 +469,8 @@ static vis_probe_status_t run_arm_generic_timer_backend(
 
 static vis_probe_status_t run_linux_x86_backend(vis_probe_report_t* report) {
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
-    if (vis_platform_detect_profile(&report->platform_profile) < 0) {
-        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
-    }
 
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__linux__) && (defined(__x86_64__) || defined(__i386__))
     if (!select_platform_candidate(
             &report->platform_profile,
             "x86_rdtscp",
@@ -575,9 +567,6 @@ static vis_probe_status_t emit_contract_only_stub(
     const char* runtime_isolation_model
 ) {
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
-    if (vis_platform_detect_profile(&report->platform_profile) < 0) {
-        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
-    }
 
     fill_common_execution_profile(&report->execution_profile,
                                   &report->platform_profile);
@@ -728,6 +717,12 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
                 "vis-probe " VIS_PROBE_VERSION);
     generate_uuid(report->report_id, sizeof(report->report_id));
     generate_timestamp(report->generated_at, sizeof(report->generated_at));
+    if (vis_platform_detect_profile(&report->platform_profile) < 0) {
+        copy_string(report->probe_result.selected_backend,
+                    sizeof(report->probe_result.selected_backend),
+                    probe_backend_name(active->backend_hint));
+        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
+    }
 
     const vis_probe_backend_descriptor_t descriptors[] = {
         {vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR, true, run_linux_x86_backend},

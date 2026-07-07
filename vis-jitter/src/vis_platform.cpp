@@ -11,9 +11,14 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <cerrno>
 
 #include <unistd.h>
 #include <sys/utsname.h>
+
+#if defined(__aarch64__)
+#include <sys/wait.h>
+#endif
 
 #if defined(__x86_64__) || defined(__i386__)
 #include <cpuid.h>
@@ -220,6 +225,27 @@ static bool arm_cntvct_monotonic() {
     uint64_t b = arm_cntvct_read();
     return b >= a;
 }
+
+static bool arm_cntvct_accessible() {
+    // Some kernels and hypervisors trap CNTVCT_EL0 reads. Probe in a child so
+    // SIGILL cannot terminate the portable probe itself.
+    pid_t child = fork();
+    if (child < 0) {
+        return false;
+    }
+    if (child == 0) {
+        (void)arm_cntvct_read();
+        _exit(0);
+    }
+
+    int status = 0;
+    pid_t waited = 0;
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+
+    return waited == child && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
 #endif
 
 static vis_time_source_candidate_t* next_candidate(
@@ -275,14 +301,23 @@ static void add_arch_counter_candidate(vis_platform_profile_t* profile) {
     }
 #elif defined(__aarch64__)
     copy_string(candidate->name, sizeof(candidate->name), "arm_cntvct_el0");
-    candidate->available = true;
-    candidate->monotonic = arm_cntvct_monotonic();
-    candidate->read_overhead_ns =
-        measure_read_overhead_ns(arm_cntvct_read_once);
-    copy_string(candidate->evidence_level, sizeof(candidate->evidence_level),
-                "architecture_counter");
-    copy_string(candidate->reason, sizeof(candidate->reason),
-                "AArch64 generic timer is readable from EL0 on this build.");
+    candidate->available = arm_cntvct_accessible();
+    if (candidate->available) {
+        candidate->monotonic = arm_cntvct_monotonic();
+        candidate->read_overhead_ns =
+            measure_read_overhead_ns(arm_cntvct_read_once);
+        copy_string(candidate->evidence_level, sizeof(candidate->evidence_level),
+                    "architecture_counter");
+        copy_string(candidate->reason, sizeof(candidate->reason),
+                    "AArch64 generic timer is readable from EL0.");
+    } else {
+        candidate->monotonic = false;
+        candidate->read_overhead_ns = 0.0;
+        copy_string(candidate->evidence_level, sizeof(candidate->evidence_level),
+                    "unavailable");
+        copy_string(candidate->reason, sizeof(candidate->reason),
+                    "CNTVCT_EL0 access is disabled or could not be probed safely.");
+    }
 #elif defined(__powerpc__) || defined(__powerpc64__) || defined(__ppc__) || defined(__ppc64__)
     copy_string(candidate->name, sizeof(candidate->name), "powerpc_time_base");
     candidate->available = false;
