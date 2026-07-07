@@ -122,6 +122,8 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
 const char* vis_probe_backend_name(vis_probe_backend_hint_t hint);
 bool vis_probe_backend_parse(const char* name,
                              vis_probe_backend_hint_t* hint);
+// Returns a per-thread snapshot valid until this function is called again on
+// the same thread.
 const vis_probe_backend_descriptor_t* vis_probe_backend_registry(
     uint32_t* count);
 bool vis_probe_register_backend(

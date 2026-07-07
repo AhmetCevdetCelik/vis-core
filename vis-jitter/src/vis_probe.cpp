@@ -712,9 +712,11 @@ static uint32_t snapshot_backend_registry(
 
 const vis_probe_backend_descriptor_t* vis_probe_backend_registry(
     uint32_t* count) {
-    std::lock_guard<std::mutex> lock(backend_registry_mutex);
-    if (count != nullptr) *count = backend_descriptor_count;
-    return backend_descriptors;
+    thread_local vis_probe_backend_descriptor_t
+        descriptors[max_backend_descriptors];
+    const uint32_t snapshot_count = snapshot_backend_registry(descriptors);
+    if (count != nullptr) *count = snapshot_count;
+    return descriptors;
 }
 
 const char* vis_probe_backend_name(vis_probe_backend_hint_t hint) {
@@ -761,11 +763,26 @@ bool vis_probe_register_backend(
             return false;
         }
     }
-    const uint32_t slot = backend_descriptor_count;
-    copy_string(owned_backend_names[slot], sizeof(owned_backend_names[slot]),
+    const uint32_t name_slot = backend_descriptor_count;
+    copy_string(owned_backend_names[name_slot],
+                sizeof(owned_backend_names[name_slot]),
                 descriptor->name);
-    backend_descriptors[slot] = *descriptor;
-    backend_descriptors[slot].name = owned_backend_names[slot];
+    uint32_t descriptor_slot = backend_descriptor_count;
+    if (descriptor->auto_candidate) {
+        for (uint32_t i = 0; i < backend_descriptor_count; i++) {
+            if (backend_descriptors[i].hint ==
+                vis_probe_backend_hint_t::POSIX_GENERIC) {
+                descriptor_slot = i;
+                break;
+            }
+        }
+    }
+    for (uint32_t i = backend_descriptor_count; i > descriptor_slot; i--) {
+        backend_descriptors[i] = backend_descriptors[i - 1];
+    }
+    backend_descriptors[descriptor_slot] = *descriptor;
+    backend_descriptors[descriptor_slot].name =
+        owned_backend_names[name_slot];
     backend_descriptor_count++;
     return true;
 }

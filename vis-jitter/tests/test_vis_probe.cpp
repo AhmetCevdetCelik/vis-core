@@ -31,6 +31,14 @@ static vis_probe_status_t run_test_backend(
     return vis_probe_status_t::VIS_PROBE_OK;
 }
 
+static vis_probe_status_t run_auto_test_backend(
+    const vis_probe_services_t*, vis_probe_report_t* report) {
+    std::snprintf(report->probe_result.selected_backend,
+                  sizeof(report->probe_result.selected_backend),
+                  "auto_test_target");
+    return vis_probe_status_t::VIS_PROBE_OK;
+}
+
 int main() {
     const vis_probe_backend_hint_t test_hint =
         static_cast<vis_probe_backend_hint_t>(100);
@@ -79,6 +87,17 @@ int main() {
                 if (!vis_probe_backend_parse("test_target", &parsed) ||
                     parsed != test_hint) {
                     registry_failed.store(true, std::memory_order_relaxed);
+                }
+                uint32_t count = 0;
+                const vis_probe_backend_descriptor_t* backends =
+                    vis_probe_backend_registry(&count);
+                for (uint32_t k = 0; k < count; k++) {
+                    if (backends[k].name == nullptr ||
+                        backends[k].name[0] == '\0' ||
+                        backends[k].run == nullptr) {
+                        registry_failed.store(true,
+                                              std::memory_order_relaxed);
+                    }
                 }
             }
         });
@@ -250,6 +269,43 @@ int main() {
         return 1;
     }
 #endif
+
+    const vis_probe_backend_hint_t auto_test_hint =
+        static_cast<vis_probe_backend_hint_t>(102);
+    const vis_probe_backend_descriptor_t auto_test_backend{
+        auto_test_hint, "auto_test_target", true, run_auto_test_backend};
+    if (!vis_probe_register_backend(&auto_test_backend)) {
+        std::printf("[test] FAILED: automatic backend registration failed.\n");
+        return 1;
+    }
+    uint32_t backend_count = 0;
+    const vis_probe_backend_descriptor_t* backends =
+        vis_probe_backend_registry(&backend_count);
+    uint32_t auto_test_index = backend_count;
+    uint32_t posix_index = backend_count;
+    for (uint32_t i = 0; i < backend_count; i++) {
+        if (backends[i].hint == auto_test_hint) auto_test_index = i;
+        if (backends[i].hint == vis_probe_backend_hint_t::POSIX_GENERIC) {
+            posix_index = i;
+        }
+    }
+    if (auto_test_index >= posix_index) {
+        std::printf("[test] FAILED: registered automatic backend follows "
+                    "POSIX fallback.\n");
+        return 1;
+    }
+    if (std::strcmp(auto_report.probe_result.selected_backend,
+                    "posix_generic") == 0) {
+        vis_probe_report_t registered_auto_report;
+        status = vis_probe_run(nullptr, &registered_auto_report);
+        if (status != vis_probe_status_t::VIS_PROBE_OK ||
+            std::strcmp(registered_auto_report.probe_result.selected_backend,
+                        "auto_test_target") != 0) {
+            std::printf("[test] FAILED: registered automatic backend was not "
+                        "selected before POSIX fallback.\n");
+            return 1;
+        }
+    }
 
     vis_probe_config_t arinc_config{
         vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE};
