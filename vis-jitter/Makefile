@@ -47,7 +47,8 @@ REPORT_REDACT_SRCS := $(SRC_DIR)/report_redactor_main.cpp \
 
 REPORT_BUNDLE_SRCS := $(SRC_DIR)/report_bundle_main.cpp \
                       $(SRC_DIR)/report_bundle.cpp \
-                      $(SRC_DIR)/report_validator.cpp
+                      $(SRC_DIR)/report_validator.cpp \
+                      $(SRC_DIR)/vis_probe_semantics.cpp
 
 REPORT_SUMMARY_SRCS := $(SRC_DIR)/report_summary_main.cpp \
                        $(SRC_DIR)/report_summary.cpp \
@@ -87,6 +88,7 @@ TEST_REPORT_BUNDLE := test_report_bundle
 TEST_REPORT_SUMMARY := test_report_summary
 TEST_API := test_public_api
 TEST_PROBE := test_vis_probe
+TEST_PROBE_POSIX := test_vis_probe_posix
 TEST_PLATFORM := test_vis_platform
 TEST_DOCTOR := test_doctor
 
@@ -113,7 +115,7 @@ $(REPORT_BUNDLE_BIN): $(REPORT_BUNDLE_SRCS) $(HDRS)
 $(REPORT_SUMMARY_BIN): $(REPORT_SUMMARY_SRCS) $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ $(REPORT_SUMMARY_SRCS)
 
-test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PLATFORM) $(TEST_DOCTOR)
+test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PROBE_POSIX) $(TEST_PLATFORM) $(TEST_DOCTOR)
 	@echo "Running test_histogram..."
 	./$(TEST_HIST)
 	@echo ""
@@ -137,6 +139,9 @@ test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTO
 	@echo ""
 	@echo "Running test_vis_probe..."
 	./$(TEST_PROBE)
+	@echo ""
+	@echo "Running test_vis_probe_posix..."
+	./$(TEST_PROBE_POSIX)
 	@echo ""
 	@echo "Running test_vis_platform..."
 	./$(TEST_PLATFORM)
@@ -178,6 +183,9 @@ $(TEST_API): $(TEST_DIR)/test_public_api.cpp $(SRC_DIR)/measurement.cpp $(SRC_DI
 $(TEST_PROBE): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(SRC_DIR)/vis_platform.cpp
 
+$(TEST_PROBE_POSIX): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
+	$(CXX) $(CXXFLAGS) -U__linux__ -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(SRC_DIR)/vis_platform.cpp
+
 $(TEST_PLATFORM): $(TEST_DIR)/test_vis_platform.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_platform.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_platform.cpp $(SRC_DIR)/vis_platform.cpp
 
@@ -198,6 +206,6 @@ docs-check:
 	../scripts/check-doc-links.sh
 
 clean:
-	rm -f $(TARGET) $(PROBE_BIN) $(DOCTOR_BIN) $(REPORT_VALIDATE_BIN) $(REPORT_REDACT_BIN) $(REPORT_BUNDLE_BIN) $(REPORT_SUMMARY_BIN) $(TEST_SMI) $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PLATFORM) $(TEST_DOCTOR)
+	rm -f $(TARGET) $(PROBE_BIN) $(DOCTOR_BIN) $(REPORT_VALIDATE_BIN) $(REPORT_REDACT_BIN) $(REPORT_BUNDLE_BIN) $(REPORT_SUMMARY_BIN) $(TEST_SMI) $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PROBE_POSIX) $(TEST_PLATFORM) $(TEST_DOCTOR)
 
 .PHONY: all test test-root test-all format-check cppcheck lint lint-extra docs-check clean

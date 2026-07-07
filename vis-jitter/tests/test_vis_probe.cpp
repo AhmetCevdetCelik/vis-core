@@ -89,6 +89,7 @@ int main() {
         vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR};
     vis_probe_report_t x86_report;
     status = vis_probe_run(&x86_config, &x86_report);
+#if defined(__linux__)
     bool rdtscp_usable = false;
     for (uint32_t i = 0; i < x86_report.platform_profile.candidate_count; i++) {
         const vis_time_source_candidate_t& candidate =
@@ -111,6 +112,15 @@ int main() {
         std::printf("[test] FAILED: unavailable RDTSCP should fall back to POSIX.\n");
         return 1;
     }
+#else
+    if (status != vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE ||
+        std::strcmp(auto_report.probe_result.selected_backend,
+                    "posix_generic") != 0 ||
+        std::strcmp(auto_report.platform_profile.os_family, "posix") != 0) {
+        std::printf("[test] FAILED: non-Linux x86 should use the POSIX backend.\n");
+        return 1;
+    }
+#endif
 #elif defined(__aarch64__)
     vis_probe_config_t arm_config{
         vis_probe_backend_hint_t::ARM_GENERIC_TIMER};
