@@ -30,40 +30,7 @@ static void print_usage(const char* argv0) {
 }
 
 static bool parse_backend(const char* text, vis_probe_backend_hint_t* out) {
-    if (text == nullptr || out == nullptr) return false;
-    if (std::strcmp(text, "auto") == 0) {
-        *out = vis_probe_backend_hint_t::AUTO;
-        return true;
-    }
-    if (std::strcmp(text, "posix_generic") == 0) {
-        *out = vis_probe_backend_hint_t::POSIX_GENERIC;
-        return true;
-    }
-    if (std::strcmp(text, "linux_x86_rdtscp_msr") == 0) {
-        *out = vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR;
-        return true;
-    }
-    if (std::strcmp(text, "arm_generic_timer") == 0) {
-        *out = vis_probe_backend_hint_t::ARM_GENERIC_TIMER;
-        return true;
-    }
-    if (std::strcmp(text, "arinc653_partition_probe") == 0) {
-        *out = vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE;
-        return true;
-    }
-    if (std::strcmp(text, "posix_pse53_probe") == 0) {
-        *out = vis_probe_backend_hint_t::POSIX_PSE53_PROBE;
-        return true;
-    }
-    if (std::strcmp(text, "autosar_adaptive_probe") == 0) {
-        *out = vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE;
-        return true;
-    }
-    if (std::strcmp(text, "hypervisor_partition_probe") == 0) {
-        *out = vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE;
-        return true;
-    }
-    return false;
+    return vis_probe_backend_parse(text, out);
 }
 
 int main(int argc, char* argv[]) {

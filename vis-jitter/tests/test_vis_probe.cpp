@@ -16,7 +16,49 @@ static bool empty(const char* value) {
     return value == nullptr || value[0] == '\0';
 }
 
+static vis_probe_status_t run_test_backend(
+    const vis_probe_services_t* services, vis_probe_report_t* report) {
+    if (services == nullptr || services->target_context == nullptr ||
+        *static_cast<const int*>(services->target_context) != 42) {
+        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
+    }
+    std::snprintf(report->probe_result.selected_backend,
+                  sizeof(report->probe_result.selected_backend),
+                  "test_target");
+    return vis_probe_status_t::VIS_PROBE_OK;
+}
+
 int main() {
+    const vis_probe_backend_hint_t test_hint =
+        static_cast<vis_probe_backend_hint_t>(100);
+    const vis_probe_backend_descriptor_t test_backend{
+        test_hint, "test_target", false, run_test_backend};
+    if (!vis_probe_register_backend(&test_backend) ||
+        std::strcmp(vis_probe_backend_name(test_hint), "test_target") != 0) {
+        std::printf("[test] FAILED: backend registry rejected target adapter.\n");
+        return 1;
+    }
+    vis_probe_backend_hint_t parsed_hint = vis_probe_backend_hint_t::AUTO;
+    if (!vis_probe_backend_parse("test_target", &parsed_hint) ||
+        parsed_hint != test_hint) {
+        std::printf("[test] FAILED: backend registry did not drive parsing.\n");
+        return 1;
+    }
+    const int target_context = 42;
+    const vis_probe_services_t test_services{
+        vis_platform_default_adapter(),
+        const_cast<int*>(&target_context),
+        nullptr, nullptr, nullptr, nullptr, nullptr};
+    const vis_probe_config_t test_config{test_hint, &test_services};
+    vis_probe_report_t test_report;
+    if (vis_probe_run(&test_config, &test_report) !=
+            vis_probe_status_t::VIS_PROBE_OK ||
+        std::strcmp(test_report.probe_result.selected_backend,
+                    "test_target") != 0) {
+        std::printf("[test] FAILED: backend services were not injected.\n");
+        return 1;
+    }
+
     if (vis_probe_run(nullptr, nullptr) !=
         vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG) {
         std::printf("[test] FAILED: null report should be invalid arg.\n");

@@ -17,10 +17,12 @@ LDFLAGS  := -lnuma -lpthread
 SRC_DIR  := src
 INC_DIR  := include
 TEST_DIR := tests
+PLATFORM_SRCS := $(SRC_DIR)/vis_platform.cpp \
+                 $(SRC_DIR)/vis_platform_hosted.cpp
 
 CORE_SRCS := $(SRC_DIR)/main.cpp \
              $(SRC_DIR)/measurement.cpp \
-             $(SRC_DIR)/vis_platform.cpp \
+             $(PLATFORM_SRCS) \
              $(SRC_DIR)/smi_audit.cpp \
              $(SRC_DIR)/histogram.cpp \
              $(SRC_DIR)/report.cpp
@@ -28,7 +30,7 @@ CORE_SRCS := $(SRC_DIR)/main.cpp \
 DOCTOR_SRCS := $(SRC_DIR)/doctor_main.cpp \
                $(SRC_DIR)/doctor.cpp \
                $(SRC_DIR)/measurement.cpp \
-               $(SRC_DIR)/vis_platform.cpp \
+               $(PLATFORM_SRCS) \
                $(SRC_DIR)/smi_audit.cpp \
                $(SRC_DIR)/histogram.cpp \
                $(SRC_DIR)/report.cpp
@@ -36,7 +38,7 @@ DOCTOR_SRCS := $(SRC_DIR)/doctor_main.cpp \
 PROBE_SRCS := $(SRC_DIR)/vis_probe_main.cpp \
               $(SRC_DIR)/vis_probe.cpp \
               $(SRC_DIR)/vis_probe_semantics.cpp \
-              $(SRC_DIR)/vis_platform.cpp
+              $(PLATFORM_SRCS)
 
 REPORT_VALIDATE_SRCS := $(SRC_DIR)/report_validator_main.cpp \
                         $(SRC_DIR)/report_validator.cpp \
@@ -178,19 +180,19 @@ $(TEST_REPORT_SUMMARY): $(TEST_DIR)/test_report_summary.cpp $(SRC_DIR)/report_su
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_report_summary.cpp $(SRC_DIR)/report_summary.cpp $(SRC_DIR)/report_validator.cpp $(SRC_DIR)/vis_probe_semantics.cpp
 
 $(TEST_API): $(TEST_DIR)/test_public_api.cpp $(SRC_DIR)/measurement.cpp $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(INC_DIR)/measurement.hpp $(INC_DIR)/smi_audit.hpp $(INC_DIR)/histogram.hpp $(INC_DIR)/vis_jitter.hpp $(INC_DIR)/report_schema.hpp
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_public_api.cpp $(SRC_DIR)/measurement.cpp $(SRC_DIR)/vis_platform.cpp $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_public_api.cpp $(SRC_DIR)/measurement.cpp $(PLATFORM_SRCS) $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(LDFLAGS)
 
-$(TEST_PROBE): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(SRC_DIR)/vis_platform.cpp
+$(TEST_PROBE): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(PLATFORM_SRCS) $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(PLATFORM_SRCS)
 
-$(TEST_PROBE_POSIX): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
-	$(CXX) $(CXXFLAGS) -U__linux__ -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(SRC_DIR)/vis_platform.cpp
+$(TEST_PROBE_POSIX): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(PLATFORM_SRCS) $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
+	$(CXX) $(CXXFLAGS) -U__linux__ -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(PLATFORM_SRCS)
 
-$(TEST_PLATFORM): $(TEST_DIR)/test_vis_platform.cpp $(SRC_DIR)/vis_platform.cpp $(INC_DIR)/vis_platform.hpp
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_platform.cpp $(SRC_DIR)/vis_platform.cpp
+$(TEST_PLATFORM): $(TEST_DIR)/test_vis_platform.cpp $(PLATFORM_SRCS) $(INC_DIR)/vis_platform.hpp
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_platform.cpp $(PLATFORM_SRCS)
 
 $(TEST_DOCTOR): $(TEST_DIR)/test_doctor.cpp $(SRC_DIR)/doctor.cpp $(SRC_DIR)/measurement.cpp $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(SRC_DIR)/report.cpp $(INC_DIR)/doctor.hpp $(INC_DIR)/vis_jitter.hpp $(INC_DIR)/report_schema.hpp
-	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_doctor.cpp $(SRC_DIR)/doctor.cpp $(SRC_DIR)/measurement.cpp $(SRC_DIR)/vis_platform.cpp $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(SRC_DIR)/report.cpp $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_doctor.cpp $(SRC_DIR)/doctor.cpp $(SRC_DIR)/measurement.cpp $(PLATFORM_SRCS) $(SRC_DIR)/smi_audit.cpp $(SRC_DIR)/histogram.cpp $(SRC_DIR)/report.cpp $(LDFLAGS)
 
 format-check:
 	../scripts/check-format.sh
