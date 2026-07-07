@@ -117,9 +117,15 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        std::fputs(json, f);
-        std::fclose(f);
+        const int write_result = std::fputs(json, f);
+        const int close_result = std::fclose(f);
         std::free(json);
+        if (write_result == EOF || close_result == EOF) {
+            std::fprintf(stderr,
+                         "[vis-probe] ERROR: Cannot write output file: %s\n",
+                         output_path);
+            return 1;
+        }
         std::printf("[vis-probe] Report saved to: %s\n", output_path);
     }
 

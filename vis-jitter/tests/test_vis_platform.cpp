@@ -73,6 +73,18 @@ int main() {
         return 1;
     }
 
+    const char* expected_claim = "portable_user_space";
+    if (std::strcmp(profile.selected_time_source, "x86_rdtscp") == 0) {
+        expected_claim = "linux_x86_rich_evidence";
+    } else if (std::strcmp(profile.selected_time_source,
+                           "arm_cntvct_el0") == 0) {
+        expected_claim = "arm_generic_timer_evidence";
+    }
+    if (std::strcmp(profile.claim_level, expected_claim) != 0) {
+        std::printf("[test] FAILED: claim level does not match selected timer.\n");
+        return 1;
+    }
+
     std::printf("[test] PASS: VIS Platform profile works.\n");
     std::printf("[test] arch=%s os=%s time_source=%s claim=%s\n",
                 profile.arch,

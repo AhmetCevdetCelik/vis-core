@@ -470,27 +470,33 @@ int vis_platform_detect_profile(vis_platform_profile_t* profile) {
     copy_string(profile->privileged_counters,
                 sizeof(profile->privileged_counters),
                 "msr_requires_root_or_cap_sys_rawio");
-    copy_string(profile->claim_level, sizeof(profile->claim_level),
-                "linux_x86_rich_evidence");
-    copy_string(profile->limitations, sizeof(profile->limitations),
-                "Portable profile records capability evidence; SMI/MSR evidence remains Linux x86 specific.");
 #elif defined(__aarch64__)
     copy_string(profile->privileged_counters,
                 sizeof(profile->privileged_counters),
                 "el0_counter_no_privileged_attestation");
-    copy_string(profile->claim_level, sizeof(profile->claim_level),
-                "arm_generic_timer_evidence");
-    copy_string(profile->limitations, sizeof(profile->limitations),
-                "Portable profile records ARM generic timer evidence only; RTOS partitioning, interrupt isolation, and hypervisor claims still require target-specific backends.");
 #else
     copy_string(profile->privileged_counters,
                 sizeof(profile->privileged_counters),
                 "platform_specific");
-    copy_string(profile->claim_level, sizeof(profile->claim_level),
-                "portable_user_space");
-    copy_string(profile->limitations, sizeof(profile->limitations),
-                "Portable profile does not imply RTOS certification or hardware determinism.");
 #endif
+
+    if (std::strcmp(profile->selected_time_source, "x86_rdtscp") == 0) {
+        copy_string(profile->claim_level, sizeof(profile->claim_level),
+                    "linux_x86_rich_evidence");
+        copy_string(profile->limitations, sizeof(profile->limitations),
+                    "Portable profile records capability evidence; SMI/MSR evidence remains Linux x86 specific.");
+    } else if (std::strcmp(profile->selected_time_source,
+                           "arm_cntvct_el0") == 0) {
+        copy_string(profile->claim_level, sizeof(profile->claim_level),
+                    "arm_generic_timer_evidence");
+        copy_string(profile->limitations, sizeof(profile->limitations),
+                    "Portable profile records ARM generic timer evidence only; RTOS partitioning, interrupt isolation, and hypervisor claims still require target-specific backends.");
+    } else {
+        copy_string(profile->claim_level, sizeof(profile->claim_level),
+                    "portable_user_space");
+        copy_string(profile->limitations, sizeof(profile->limitations),
+                    "Portable profile does not imply RTOS certification or hardware determinism.");
+    }
 
     fill_platform_fingerprint(profile);
     return 0;
