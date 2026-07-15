@@ -19,11 +19,20 @@
 
 class json_syntax_parser_t {
 public:
+    static constexpr size_t kMaxNestingDepth = 128;
+
     explicit json_syntax_parser_t(const std::string& json) : json_(json) {}
 
     bool parse() {
         skip_whitespace();
-        if (!parse_value()) return false;
+        if (!parse_value(0)) return false;
+        skip_whitespace();
+        return pos_ == json_.size();
+    }
+
+    bool parse_string_document(std::string* value) {
+        skip_whitespace();
+        if (!parse_string(value)) return false;
         skip_whitespace();
         return pos_ == json_.size();
     }
@@ -43,12 +52,12 @@ private:
         return true;
     }
 
-    bool parse_value() {
+    bool parse_value(size_t depth) {
         skip_whitespace();
-        if (pos_ >= json_.size()) return false;
+        if (pos_ >= json_.size() || depth > kMaxNestingDepth) return false;
         switch (json_[pos_]) {
-            case '{': return parse_object();
-            case '[': return parse_array();
+            case '{': return parse_object(depth);
+            case '[': return parse_array(depth);
             case '"': return parse_string();
             case 't': return parse_literal("true");
             case 'f': return parse_literal("false");
@@ -57,7 +66,7 @@ private:
         }
     }
 
-    bool parse_object() {
+    bool parse_object(size_t depth) {
         if (!consume('{')) return false;
         skip_whitespace();
         if (consume('}')) return true;
@@ -69,7 +78,7 @@ private:
                 return false;
             }
             skip_whitespace();
-            if (!consume(':') || !parse_value()) return false;
+            if (!consume(':') || !parse_value(depth + 1)) return false;
             skip_whitespace();
             if (consume('}')) return true;
             if (!consume(',')) return false;
@@ -77,12 +86,12 @@ private:
         }
     }
 
-    bool parse_array() {
+    bool parse_array(size_t depth) {
         if (!consume('[')) return false;
         skip_whitespace();
         if (consume(']')) return true;
         while (true) {
-            if (!parse_value()) return false;
+            if (!parse_value(depth + 1)) return false;
             skip_whitespace();
             if (consume(']')) return true;
             if (!consume(',')) return false;
@@ -246,12 +255,10 @@ static bool extract_json_string_field(const std::string& json,
     size_t quote = json.find('"', colon + 1);
     if (quote == std::string::npos) return false;
 
-    std::string out;
     bool escaped = false;
     for (size_t i = quote + 1; i < json.size(); i++) {
         const char c = json[i];
         if (escaped) {
-            out.push_back(c);
             escaped = false;
             continue;
         }
@@ -260,10 +267,9 @@ static bool extract_json_string_field(const std::string& json,
             continue;
         }
         if (c == '"') {
-            if (value) *value = out;
-            return true;
+            const std::string encoded = json.substr(quote, i - quote + 1);
+            return json_syntax_parser_t(encoded).parse_string_document(value);
         }
-        out.push_back(c);
     }
     return false;
 }
@@ -440,8 +446,12 @@ static bool extract_direct_json_string(const std::string& json,
         return false;
     }
     if (value != nullptr) {
-        *value = json.substr(member.value_begin + 1,
-                             member.value_end - member.value_begin - 1);
+        const std::string encoded =
+            json.substr(member.value_begin,
+                        member.value_end - member.value_begin + 1);
+        if (!json_syntax_parser_t(encoded).parse_string_document(value)) {
+            return false;
+        }
     }
     return true;
 }
@@ -673,9 +683,9 @@ static void validate_probe_report_semantics(
                                sections[0].value_end, "selected_time_source",
                                &selected_time_source);
     if (result->evidence_level == "linux_x86_rich_evidence" &&
-        selected_time_source == "posix_clock_monotonic") {
+        selected_time_source != "x86_rdtscp") {
         result->errors.push_back(
-            "linux_x86_rich_evidence cannot rely on posix_clock_monotonic");
+            "linux_x86_rich_evidence must rely on x86_rdtscp");
     }
     if (result->evidence_level == "arm_generic_timer_evidence" &&
         selected_time_source != "arm_cntvct_el0") {

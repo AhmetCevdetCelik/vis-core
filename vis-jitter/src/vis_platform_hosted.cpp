@@ -90,7 +90,11 @@ static const char* detect_environment() {
 
 static const char* detect_hypervisor_surface() {
 #if defined(__linux__)
-    if (access("/sys/hypervisor", F_OK) == 0) {
+    // An empty /sys/hypervisor directory is present on some bare-metal hosts.
+    // Require a concrete interface entry before claiming hypervisor evidence.
+    if (access("/sys/hypervisor/type", F_OK) == 0 ||
+        access("/sys/hypervisor/properties", F_OK) == 0 ||
+        access("/sys/hypervisor/version", F_OK) == 0) {
         return "linux_sysfs_hypervisor_present";
     }
     return "not_detected_rootless";

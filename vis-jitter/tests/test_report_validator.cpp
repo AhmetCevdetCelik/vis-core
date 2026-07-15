@@ -89,6 +89,60 @@ int main() {
         return 1;
     }
 
+    std::string escaped_probe = probe;
+    const size_t escaped_level = escaped_probe.rfind("portable_user_space");
+    if (escaped_level == std::string::npos) {
+        std::fprintf(stderr, "[test] escaped probe fixture was not found\n");
+        return 1;
+    }
+    escaped_probe.replace(escaped_level,
+                          std::string("portable_user_space").size(),
+                          "portable_user_\\u0073pace");
+    if (!vis_report_validate_json(escaped_probe, &result) ||
+        result.evidence_level != "portable_user_space") {
+        std::fprintf(stderr, "[test] escaped probe enum was rejected\n");
+        return 1;
+    }
+
+    std::string contradictory_x86_probe = probe;
+    const size_t portable_level =
+        contradictory_x86_probe.rfind("portable_user_space");
+    if (portable_level == std::string::npos) {
+        std::fprintf(stderr, "[test] x86 probe fixture was not found\n");
+        return 1;
+    }
+    contradictory_x86_probe.replace(
+        portable_level, std::string("portable_user_space").size(),
+        "linux_x86_rich_evidence");
+    const size_t posix_source =
+        contradictory_x86_probe.find("posix_clock_monotonic");
+    if (posix_source == std::string::npos) {
+        std::fprintf(stderr, "[test] timer fixture was not found\n");
+        return 1;
+    }
+    contradictory_x86_probe.replace(
+        posix_source, std::string("posix_clock_monotonic").size(),
+        "arm_cntvct_el0");
+    if (vis_report_validate_json(contradictory_x86_probe, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] contradictory x86 rich evidence was accepted\n");
+        return 1;
+    }
+
+    std::string deeply_nested =
+        "{\"vis_mem_probe_report\":{\"schema_version\":\"0.1\","
+        "\"generator\":\"test\",\"nested\":";
+    for (size_t i = 0; i <= 128; i++) deeply_nested += '[';
+    deeply_nested += "null";
+    for (size_t i = 0; i <= 128; i++) deeply_nested += ']';
+    deeply_nested += "}}";
+    if (vis_report_validate_json(deeply_nested, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] excessive JSON nesting was accepted\n");
+        return 1;
+    }
+
     std::string missing_member_comma = probe;
     const std::string comma_before_evidence =
         "    },\n    \"evidence_level\"";

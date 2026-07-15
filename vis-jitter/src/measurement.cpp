@@ -554,6 +554,13 @@ vis_status_t vis_jitter_run(
     if (vis_platform_detect_profile(&report->platform) < 0) {
         return vis_status_t::VIS_ERR_INVALID_ARG;
     }
+    if (std::strcmp(report->platform.selected_time_source,
+                    "x86_rdtscp") != 0) {
+        fprintf(stderr,
+                "[vis-jitter] ERROR: The jitter measurement path requires "
+                "a validated x86_rdtscp time source.\n");
+        return vis_status_t::VIS_ERR_TIME_SOURCE;
+    }
 
     if (vis_detect_system(core_id, &report->detected) < 0) {
         return vis_status_t::VIS_ERR_INVALID_ARG;
