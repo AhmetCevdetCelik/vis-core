@@ -39,6 +39,40 @@ static vis_probe_status_t run_auto_test_backend(
     return vis_probe_status_t::VIS_PROBE_OK;
 }
 
+static vis_probe_status_t run_dirty_unavailable_backend(
+    const vis_probe_services_t*, vis_probe_report_t* report) {
+    std::snprintf(report->generator, sizeof(report->generator),
+                  "contaminated-generator");
+    return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
+}
+
+static vis_probe_status_t run_fatal_auto_backend(
+    const vis_probe_services_t* services, vis_probe_report_t*) {
+    if (services == nullptr || services->target_context == nullptr) {
+        return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
+    }
+    return *static_cast<const int*>(services->target_context) == 1
+        ? vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG
+        : vis_probe_status_t::VIS_PROBE_ERR_NO_TIME_SOURCE;
+}
+
+static int detect_posix_only_platform(void*, vis_platform_profile_t* profile) {
+    std::memset(profile, 0, sizeof(*profile));
+    std::snprintf(profile->profile_version, sizeof(profile->profile_version),
+                  "%s", VIS_PLATFORM_PROFILE_VERSION);
+    std::snprintf(profile->arch, sizeof(profile->arch), "test");
+    std::snprintf(profile->os_family, sizeof(profile->os_family), "posix");
+    profile->candidate_count = 1;
+    vis_time_source_candidate_t* candidate = &profile->candidates[0];
+    std::snprintf(candidate->name, sizeof(candidate->name),
+                  "posix_clock_monotonic");
+    candidate->available = true;
+    candidate->monotonic = true;
+    std::snprintf(candidate->evidence_level,
+                  sizeof(candidate->evidence_level), "portable");
+    return 0;
+}
+
 int main() {
     const vis_probe_backend_hint_t test_hint =
         static_cast<vis_probe_backend_hint_t>(100);
@@ -269,6 +303,65 @@ int main() {
         return 1;
     }
 #endif
+
+    const vis_platform_adapter_t posix_only_adapter{
+        nullptr, detect_posix_only_platform};
+    const int fatal_backend_context = 1;
+    const vis_probe_services_t posix_only_services{
+        &posix_only_adapter, const_cast<int*>(&fatal_backend_context),
+        nullptr, nullptr,
+        nullptr, nullptr, nullptr};
+    const vis_probe_config_t posix_only_auto_config{
+        vis_probe_backend_hint_t::AUTO, &posix_only_services};
+
+    const vis_probe_backend_hint_t dirty_unavailable_hint =
+        static_cast<vis_probe_backend_hint_t>(103);
+    const vis_probe_backend_descriptor_t dirty_unavailable_backend{
+        dirty_unavailable_hint, "dirty_unavailable", true,
+        run_dirty_unavailable_backend};
+    if (!vis_probe_register_backend(&dirty_unavailable_backend)) {
+        std::printf("[test] FAILED: unavailable backend registration failed.\n");
+        return 1;
+    }
+    vis_probe_report_t isolated_auto_report;
+    status = vis_probe_run(&posix_only_auto_config, &isolated_auto_report);
+    if (status != vis_probe_status_t::VIS_PROBE_OK ||
+        std::strcmp(isolated_auto_report.probe_result.selected_backend,
+                    "posix_generic") != 0 ||
+        std::strcmp(isolated_auto_report.generator,
+                    "vis-probe " VIS_PROBE_VERSION) != 0) {
+        std::printf("[test] FAILED: unavailable backend contaminated AUTO "
+                    "fallback.\n");
+        return 1;
+    }
+
+    const vis_probe_backend_hint_t fatal_auto_hint =
+        static_cast<vis_probe_backend_hint_t>(104);
+    const vis_probe_backend_descriptor_t fatal_auto_backend{
+        fatal_auto_hint, "fatal_auto", true, run_fatal_auto_backend};
+    if (!vis_probe_register_backend(&fatal_auto_backend)) {
+        std::printf("[test] FAILED: fatal backend registration failed.\n");
+        return 1;
+    }
+    vis_probe_report_t fatal_auto_report;
+    status = vis_probe_run(&posix_only_auto_config, &fatal_auto_report);
+    if (status != vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG ||
+        std::strcmp(fatal_auto_report.probe_result.selected_backend,
+                    "auto") != 0) {
+        std::printf("[test] FAILED: fatal AUTO backend error was masked.\n");
+        return 1;
+    }
+    const int no_time_source_context = 2;
+    const vis_probe_services_t no_time_source_services{
+        &posix_only_adapter, const_cast<int*>(&no_time_source_context),
+        nullptr, nullptr, nullptr, nullptr, nullptr};
+    const vis_probe_config_t no_time_source_config{
+        vis_probe_backend_hint_t::AUTO, &no_time_source_services};
+    status = vis_probe_run(&no_time_source_config, &fatal_auto_report);
+    if (status != vis_probe_status_t::VIS_PROBE_ERR_NO_TIME_SOURCE) {
+        std::printf("[test] FAILED: AUTO time-source error was masked.\n");
+        return 1;
+    }
 
     const vis_probe_backend_hint_t auto_test_hint =
         static_cast<vis_probe_backend_hint_t>(102);

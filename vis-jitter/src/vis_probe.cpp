@@ -836,8 +836,14 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
             const vis_probe_backend_descriptor_t& descriptor =
                 descriptors[i];
             if (!descriptor.auto_candidate) continue;
-            status = descriptor.run(services, report);
+            vis_probe_report_t candidate_report = *report;
+            status = descriptor.run(services, &candidate_report);
             if (status == vis_probe_status_t::VIS_PROBE_OK) {
+                *report = candidate_report;
+                break;
+            }
+            if (status !=
+                vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE) {
                 break;
             }
         }

@@ -31,6 +31,37 @@ int main() {
         return 1;
     }
 
+    std::string valid_utf8 =
+        "{\"vis_mem_probe_report\":{\"schema_version\":\"0.1\","
+        "\"generator\":\"caf";
+    valid_utf8.append("\xc3\xa9 \xf0\x9f\x98\x80", 7);
+    valid_utf8 += "\"}}";
+    if (!vis_report_validate_json(valid_utf8, &result)) {
+        std::fprintf(stderr, "[test] valid UTF-8 was rejected\n");
+        return 1;
+    }
+
+    const std::string invalid_utf8_sequences[] = {
+        std::string("\xff", 1),
+        std::string("\x80", 1),
+        std::string("\xc0\xaf", 2),
+        std::string("\xe2\x28\xa1", 3),
+        std::string("\xed\xa0\x80", 3),
+        std::string("\xf4\x90\x80\x80", 4),
+    };
+    for (const std::string& sequence : invalid_utf8_sequences) {
+        std::string invalid_utf8 =
+            "{\"vis_mem_probe_report\":{\"schema_version\":\"0.1\","
+            "\"generator\":\"bad";
+        invalid_utf8 += sequence;
+        invalid_utf8 += "\"}}";
+        if (vis_report_validate_json(invalid_utf8, &result) ||
+            result.errors.empty()) {
+            std::fprintf(stderr, "[test] invalid UTF-8 was accepted\n");
+            return 1;
+        }
+    }
+
     const std::string escaped_member_names =
         "{\"vis\\u005fmem_probe_report\":{"
         "\"schema\\u005fversion\":\"0.1\","

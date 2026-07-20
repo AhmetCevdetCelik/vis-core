@@ -134,6 +134,40 @@ private:
         return true;
     }
 
+    bool parse_utf8_sequence(unsigned char first, std::string* value) {
+        size_t continuation_count = 0;
+        unsigned int code_point = 0;
+        unsigned int minimum = 0;
+        if (first >= 0xc2 && first <= 0xdf) {
+            continuation_count = 1;
+            code_point = first & 0x1f;
+            minimum = 0x80;
+        } else if (first >= 0xe0 && first <= 0xef) {
+            continuation_count = 2;
+            code_point = first & 0x0f;
+            minimum = 0x800;
+        } else if (first >= 0xf0 && first <= 0xf4) {
+            continuation_count = 3;
+            code_point = first & 0x07;
+            minimum = 0x10000;
+        } else {
+            return false;
+        }
+
+        if (pos_ + continuation_count > json_.size()) return false;
+        value->push_back(static_cast<char>(first));
+        for (size_t i = 0; i < continuation_count; i++) {
+            const unsigned char continuation =
+                static_cast<unsigned char>(json_[pos_++]);
+            if ((continuation & 0xc0) != 0x80) return false;
+            code_point = (code_point << 6) | (continuation & 0x3f);
+            value->push_back(static_cast<char>(continuation));
+        }
+
+        return code_point >= minimum && code_point <= 0x10ffff &&
+               !(code_point >= 0xd800 && code_point <= 0xdfff);
+    }
+
     bool parse_string(std::string* value = nullptr) {
         if (!consume('"')) return false;
         std::string decoded;
@@ -146,7 +180,11 @@ private:
             }
             if (c < 0x20) return false;
             if (c != '\\') {
-                decoded.push_back(static_cast<char>(c));
+                if (c < 0x80) {
+                    decoded.push_back(static_cast<char>(c));
+                } else if (!parse_utf8_sequence(c, &decoded)) {
+                    return false;
+                }
                 continue;
             }
             if (pos_ >= json_.size()) return false;
