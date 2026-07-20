@@ -31,6 +31,17 @@ int main() {
         return 1;
     }
 
+    const std::string escaped_member_names =
+        "{\"vis\\u005fmem_probe_report\":{"
+        "\"schema\\u005fversion\":\"0.1\","
+        "\"generator\":\"vis-mem-probe 0.1.0\"}}";
+    if (!vis_report_validate_json(escaped_member_names, &result) ||
+        result.report_type != "vis_mem_probe_report" ||
+        result.schema_version != "0.1") {
+        std::fprintf(stderr, "[test] escaped member names were rejected\n");
+        return 1;
+    }
+
     const std::string old_core =
         "{\n"
         "  \"vis_report\": {\n"
@@ -86,6 +97,169 @@ int main() {
         result.report_type != "vis_probe_report" ||
         result.evidence_level != "portable_user_space") {
         std::fprintf(stderr, "[test] VIS Probe report was rejected\n");
+        return 1;
+    }
+
+    std::string escaped_probe = probe;
+    const size_t escaped_level = escaped_probe.rfind("portable_user_space");
+    if (escaped_level == std::string::npos) {
+        std::fprintf(stderr, "[test] escaped probe fixture was not found\n");
+        return 1;
+    }
+    escaped_probe.replace(escaped_level,
+                          std::string("portable_user_space").size(),
+                          "portable_user_\\u0073pace");
+    if (!vis_report_validate_json(escaped_probe, &result) ||
+        result.evidence_level != "portable_user_space") {
+        std::fprintf(stderr, "[test] escaped probe enum was rejected\n");
+        return 1;
+    }
+
+    std::string contradictory_x86_probe = probe;
+    const size_t portable_level =
+        contradictory_x86_probe.rfind("portable_user_space");
+    if (portable_level == std::string::npos) {
+        std::fprintf(stderr, "[test] x86 probe fixture was not found\n");
+        return 1;
+    }
+    contradictory_x86_probe.replace(
+        portable_level, std::string("portable_user_space").size(),
+        "linux_x86_rich_evidence");
+    const size_t posix_source =
+        contradictory_x86_probe.find("posix_clock_monotonic");
+    if (posix_source == std::string::npos) {
+        std::fprintf(stderr, "[test] timer fixture was not found\n");
+        return 1;
+    }
+    contradictory_x86_probe.replace(
+        posix_source, std::string("posix_clock_monotonic").size(),
+        "arm_cntvct_el0");
+    if (vis_report_validate_json(contradictory_x86_probe, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] contradictory x86 rich evidence was accepted\n");
+        return 1;
+    }
+
+    std::string deeply_nested =
+        "{\"vis_mem_probe_report\":{\"schema_version\":\"0.1\","
+        "\"generator\":\"test\",\"nested\":";
+    for (size_t i = 0; i <= 128; i++) deeply_nested += '[';
+    deeply_nested += "null";
+    for (size_t i = 0; i <= 128; i++) deeply_nested += ']';
+    deeply_nested += "}}";
+    if (vis_report_validate_json(deeply_nested, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] excessive JSON nesting was accepted\n");
+        return 1;
+    }
+
+    std::string missing_member_comma = probe;
+    const std::string comma_before_evidence =
+        "    },\n    \"evidence_level\"";
+    const size_t comma_position =
+        missing_member_comma.find(comma_before_evidence);
+    if (comma_position == std::string::npos) {
+        std::fprintf(stderr, "[test] malformed probe fixture was not found\n");
+        return 1;
+    }
+    missing_member_comma.erase(comma_position + 5, 1);
+    if (vis_report_validate_json(missing_member_comma, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] probe with missing comma was accepted\n");
+        return 1;
+    }
+
+    const std::string trailing_content = probe + "garbage";
+    if (vis_report_validate_json(trailing_content, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] probe with trailing content was accepted\n");
+        return 1;
+    }
+
+    const std::string duplicate_schema =
+        "{\"vis_mem_probe_report\":{"
+        "\"schema_version\":\"0.1\","
+        "\"schema_version\":\"9.9\","
+        "\"generator\":\"vis-mem-probe 0.1.0\"}}";
+    if (vis_report_validate_json(duplicate_schema, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] duplicate schema member was accepted\n");
+        return 1;
+    }
+
+    const std::string escaped_duplicate_member =
+        "{\"vis_mem_probe_report\":{"
+        "\"schema_version\":\"0.1\","
+        "\"schema\\u005fversion\":\"9.9\","
+        "\"generator\":\"vis-mem-probe 0.1.0\"}}";
+    if (vis_report_validate_json(escaped_duplicate_member, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] escaped duplicate member was accepted\n");
+        return 1;
+    }
+
+    const std::string structurally_invalid_probe =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-probe 0.1.0\",\n"
+        "    \"platform_profile\": null,\n"
+        "    \"execution_profile\": null,\n"
+        "    \"probe_result\": null,\n"
+        "    \"target_contract\": null,\n"
+        "    \"evidence_level\": \"portable_user_space\",\n"
+        "    \"misplaced\": {\n"
+        "      \"selected_time_source\": \"posix_clock_monotonic\",\n"
+        "      \"execution_environment\": \"posix_user_space\",\n"
+        "      \"selected_backend\": \"posix_generic\",\n"
+        "      \"backend_status\": \"selected\",\n"
+        "      \"timer_evidence_level\": \"portable\",\n"
+        "      \"execution_evidence_level\": \"portable_user_space\",\n"
+        "      \"target_profile_family\": \"hosted_posix\",\n"
+        "      \"target_runtime_api_status\": \"host_native\"\n"
+        "    }\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(structurally_invalid_probe, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] structurally invalid probe was accepted\n");
+        return 1;
+    }
+
+    const std::string probe_with_nested_metadata =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"metadata\": {\n"
+        "      \"schema_version\": \"0.1\",\n"
+        "      \"generator\": \"vis-probe 0.1.0\"\n"
+        "    }\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(probe_with_nested_metadata, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr,
+                     "[test] probe with nested metadata was accepted\n");
+        return 1;
+    }
+
+    const std::string incomplete_probe =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-probe 0.1.0\",\n"
+        "    \"platform_profile\": {\"selected_time_source\": \"posix_clock_monotonic\"},\n"
+        "    \"execution_profile\": {\"execution_environment\": \"posix_user_space\"},\n"
+        "    \"probe_result\": {\"selected_backend\": \"posix_generic\"},\n"
+        "    \"target_contract\": {\"target_profile_family\": \"hosted_posix\"},\n"
+        "    \"evidence_level\": \"portable_user_space\"\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(incomplete_probe, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] incomplete probe was accepted\n");
         return 1;
     }
 

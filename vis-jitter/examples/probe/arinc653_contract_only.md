@@ -1,7 +1,12 @@
 # arinc653_contract_only
 
-This example is intentionally not a measurement report.
+This example shows the intended contract-only RTOS behavior.
 
-- Measures: no live ARINC target behavior yet
-- Does not measure: partition behavior, timer overhead on target, WCET, or isolation
-- Why useful: documents the target contract and blocks false target claims
+- Host timing evidence is real and hosted: `architecture_counter`
+- Target contract is ARINC 653
+- Target runtime API is missing on the hosted machine
+- No ARINC timing, partition isolation, WCET, or temporal isolation claim is
+  opened
+
+This is the core "supporting evidence" story for GIS-style review: VIS can
+model the target backend honestly before it can actually attest it.

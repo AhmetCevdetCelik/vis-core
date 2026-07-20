@@ -53,6 +53,7 @@ enum class vis_status_t : int {
     VIS_ERR_MSR         = -2,  /**< Could not open MSR device (need root or CAP_SYS_RAWIO) */
     VIS_ERR_NO_SAMPLES  = -3,  /**< All measurement windows were rejected (excessive SMI) */
     VIS_ERR_INVALID_ARG = -4,  /**< Invalid argument (e.g., negative duration) */
+    VIS_ERR_TIME_SOURCE = -5,  /**< Required measurement time source is unavailable */
 };
 
 // ===========================================================================

@@ -1,8 +1,10 @@
 # linux_x86_rich_evidence
 
-This example is the strongest evidence shape VIS Core currently has in
-practice: hosted Linux/x86 timing plus richer hosted timer surfaces.
+This example shows the strongest current hosted evidence path in VIS Core.
 
-- Measures: hosted timer behavior and hosted scheduler-visible execution
-- Does not measure: RTOS partition behavior, ARINC scheduling, or WCET proof
-- Why useful: shows the report shape for real collected runtime evidence
+- Host timing evidence is strong: `linux_x86_rich_evidence`
+- Target contract is still a hosted Linux contract, not an RTOS contract
+- Execution evidence remains `portable_user_space`
+
+This is useful as support evidence for runtime characterization, but it does not
+prove WCET or temporal isolation.

@@ -551,8 +551,22 @@ vis_status_t vis_jitter_run(
     generate_uuid(report->report_id, sizeof(report->report_id));
     generate_timestamp(report->generated_at, sizeof(report->generated_at));
 
+    // Validate RDTSCP while pinned to the CPU that will run the measurement.
+    // Otherwise an incidental scheduler migration during the AUX stability
+    // check can make a usable invariant TSC appear unavailable.
+    if (pin_thread_to_core(core_id) < 0) {
+        return vis_status_t::VIS_ERR_AFFINITY;
+    }
+
     if (vis_platform_detect_profile(&report->platform) < 0) {
         return vis_status_t::VIS_ERR_INVALID_ARG;
+    }
+    if (std::strcmp(report->platform.selected_time_source,
+                    "x86_rdtscp") != 0) {
+        fprintf(stderr,
+                "[vis-jitter] ERROR: The jitter measurement path requires "
+                "a validated x86_rdtscp time source.\n");
+        return vis_status_t::VIS_ERR_TIME_SOURCE;
     }
 
     if (vis_detect_system(core_id, &report->detected) < 0) {

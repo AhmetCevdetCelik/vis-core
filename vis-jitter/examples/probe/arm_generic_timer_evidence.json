@@ -1,22 +1,22 @@
 {
   "vis_probe_report": {
     "schema_version": "0.1",
-    "report_id": "22222222-2222-4222-8222-222222222222",
-    "generated_at": "2026-07-02T12:05:00Z",
-    "generator": "vis-probe example",
+    "report_id": "example-arm-generic-timer-evidence",
+    "generated_at": "2026-07-02T12:09:34Z",
+    "generator": "vis-probe 0.1.0",
     "evidence_level": "arm_generic_timer_evidence",
-    "limitations": "ARM generic timer evidence here is still hosted runtime evidence, not RTOS target attestation.",
+    "limitations": "Portable probe records ARM generic timer evidence only; RTOS interrupt models and partition timing still require target-specific probe backends.",
     "platform_profile": {
       "profile_version": "0.1",
       "arch": "aarch64",
       "os_family": "linux",
       "environment": "linux_user_space",
       "abi_bits": 64,
-      "kernel_release": "6.8.0-arm-example",
-      "platform_fingerprint": "demo-arm-linux",
+      "kernel_release": "6.8.0-arm64-generic",
+      "platform_fingerprint": "arm64example000001",
       "selected_time_source": "arm_cntvct_el0",
       "time_source_evidence_level": "architecture_counter",
-      "time_source_read_overhead_ns": 18.0,
+      "time_source_read_overhead_ns": 18.4,
       "time_source_monotonic": true,
       "capabilities": {
         "affinity_control": "pthread_affinity_available",
@@ -26,46 +26,32 @@
         "posix_profile": "posix_like_not_pse53_claimed",
         "arinc653_surface": "not_present_in_hosted_linux_build",
         "autosar_adaptive_surface": "posix_like_user_space_candidate",
-        "hypervisor_surface": "not_claimed",
+        "hypervisor_surface": "not_detected_rootless",
         "runtime_isolation_hint": "shared_host_scheduler_runtime",
         "interrupt_evidence": "linux_proc_interrupts_optional",
         "thermal_evidence": "linux_sysfs_optional",
         "memory_policy": "linux_numa_optional",
-        "privileged_counters": "platform_specific"
+        "privileged_counters": "el0_counter_no_privileged_attestation"
       },
       "claim_level": "arm_generic_timer_evidence",
-      "limitations": "Hosted ARM evidence does not prove target RTOS behavior.",
+      "limitations": "Portable probe records ARM generic timer evidence only; RTOS interrupt models and partition timing still require target-specific probe backends.",
       "time_source_candidates": [
-        {
-          "name": "arm_cntvct_el0",
-          "available": true,
-          "monotonic": true,
-          "read_overhead_ns": 18.0,
-          "evidence_level": "architecture_counter",
-          "reason": "ARM generic timer path is modeled as available for portable evidence."
-        },
-        {
-          "name": "posix_clock_monotonic",
-          "available": true,
-          "monotonic": true,
-          "read_overhead_ns": 55.0,
-          "evidence_level": "portable",
-          "reason": "Portable POSIX fallback timer available in user space."
-        }
+        {"name": "arm_cntvct_el0", "available": true, "monotonic": true, "read_overhead_ns": 18.4, "evidence_level": "architecture_counter", "reason": "AArch64 generic timer is readable from EL0 on this build."},
+        {"name": "posix_clock_monotonic", "available": true, "monotonic": true, "read_overhead_ns": 58.0, "evidence_level": "portable", "reason": "Portable POSIX fallback timer available in user space."}
       ]
     },
     "target_contract": {
-      "target_profile_family": "hosted_linux_aarch64",
+      "target_profile_family": "hosted_aarch64",
       "target_timer_model": "arm_cntvct_el0",
       "target_scheduler_model": "linux_sched_attr_or_pthreads",
       "target_partition_model": "process_or_container_isolation",
-      "target_privilege_model": "user_space_counter_access",
+      "target_privilege_model": "el0_counter_no_privileged_attestation",
       "target_runtime_api_status": "host_native",
       "target_arinc653_surface": "not_claimed",
       "target_posix_pse53_surface": "host_posix_like",
       "target_autosar_adaptive_surface": "not_claimed",
       "target_hypervisor_surface": "not_claimed",
-      "target_limitations": "Target contract matches a hosted ARM runtime shape only."
+      "target_limitations": "Target contract matches the current hosted runtime."
     },
     "execution_profile": {
       "execution_environment": "linux_user_space",
@@ -77,7 +63,7 @@
       "posix_surface": "posix_like_not_pse53_claimed",
       "arinc653_surface": "not_present_in_hosted_linux_build",
       "autosar_adaptive_surface": "posix_like_user_space_candidate",
-      "hypervisor_surface": "not_claimed",
+      "hypervisor_surface": "not_detected_rootless",
       "runtime_isolation_model": "shared_host_scheduler_runtime",
       "portability_tier": "portable_probe_foundation",
       "interrupt_visibility": "linux_proc_interrupts_optional",
@@ -86,11 +72,11 @@
     "probe_result": {
       "selected_backend": "arm_generic_timer",
       "backend_status": "selected",
-      "backend_status_reason": "ARM generic timer timing path is active in this example.",
+      "backend_status_reason": "AArch64 EL0 generic timer path is active on this host.",
       "selected_time_source": "arm_cntvct_el0",
       "time_source_monotonic": true,
-      "time_source_read_overhead_ns": 18.0,
-      "privilege_requirement": "user_space_if_counter_enabled",
+      "time_source_read_overhead_ns": 18.4,
+      "privilege_requirement": "none_for_el0_timer_read",
       "timer_evidence_level": "architecture_counter",
       "execution_evidence_level": "portable_user_space",
       "unsupported_reason": "none"

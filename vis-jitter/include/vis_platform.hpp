@@ -59,6 +59,12 @@ struct vis_platform_profile_t {
     vis_time_source_candidate_t candidates[4];
 };
 
+/** Target-supplied platform detection boundary. */
+struct vis_platform_adapter_t {
+    void* context;
+    int (*detect_profile)(void* context, vis_platform_profile_t* profile);
+};
+
 /**
  * Detect the current platform and select the best available low-level timing
  * source known to this VIS build.
@@ -67,3 +73,11 @@ struct vis_platform_profile_t {
  * whitelist-only capability validation. It never probes arbitrary registers.
  */
 int vis_platform_detect_profile(vis_platform_profile_t* profile);
+
+/** Detect through an explicitly supplied hosted or target adapter. */
+int vis_platform_detect_profile_with_adapter(
+    const vis_platform_adapter_t* adapter,
+    vis_platform_profile_t* profile);
+
+/** Default adapter linked by the selected platform build. */
+const vis_platform_adapter_t* vis_platform_default_adapter();

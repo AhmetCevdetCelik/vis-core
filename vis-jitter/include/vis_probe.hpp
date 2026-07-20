@@ -92,9 +92,41 @@ struct vis_probe_report_t {
 
 struct vis_probe_config_t {
     vis_probe_backend_hint_t backend_hint;
+    const struct vis_probe_services_t* services = nullptr;
+};
+
+/** Target services injected into platform detection and backend execution. */
+struct vis_probe_services_t {
+    const vis_platform_adapter_t* platform;
+    void* target_context;
+    uint64_t (*timer_now)(void* context);
+    int (*query_scheduler)(void* context, char* value, uint32_t value_size);
+    int (*query_partition)(void* context, char* value, uint32_t value_size);
+    int (*query_privilege)(void* context, char* value, uint32_t value_size);
+    int (*query_runtime)(void* context, char* value, uint32_t value_size);
+};
+
+using vis_probe_backend_runner_t = vis_probe_status_t (*)(
+    const vis_probe_services_t* services,
+    vis_probe_report_t* report);
+
+struct vis_probe_backend_descriptor_t {
+    vis_probe_backend_hint_t hint;
+    const char* name;
+    bool auto_candidate;
+    vis_probe_backend_runner_t run;
 };
 
 vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
                                  vis_probe_report_t* report);
+const char* vis_probe_backend_name(vis_probe_backend_hint_t hint);
+bool vis_probe_backend_parse(const char* name,
+                             vis_probe_backend_hint_t* hint);
+// Returns a per-thread snapshot valid until this function is called again on
+// the same thread.
+const vis_probe_backend_descriptor_t* vis_probe_backend_registry(
+    uint32_t* count);
+bool vis_probe_register_backend(
+    const vis_probe_backend_descriptor_t* descriptor);
 char* vis_probe_report_to_json(const vis_probe_report_t* report);
 void vis_probe_report_print_summary(const vis_probe_report_t* report);

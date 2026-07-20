@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -144,34 +145,12 @@ static void generate_uuid(char* buf, size_t buf_size) {
 
 static void generate_timestamp(char* buf, size_t buf_size) {
     time_t now = time(nullptr);
-    struct tm* utc = gmtime(&now);
-    if (utc == nullptr) {
+    struct tm utc;
+    if (gmtime_r(&now, &utc) == nullptr) {
         std::snprintf(buf, buf_size, "unknown");
         return;
     }
-    strftime(buf, buf_size, "%Y-%m-%dT%H:%M:%SZ", utc);
-}
-
-static const char* probe_backend_name(vis_probe_backend_hint_t hint) {
-    switch (hint) {
-        case vis_probe_backend_hint_t::POSIX_GENERIC:
-            return "posix_generic";
-        case vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR:
-            return "linux_x86_rdtscp_msr";
-        case vis_probe_backend_hint_t::ARM_GENERIC_TIMER:
-            return "arm_generic_timer";
-        case vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE:
-            return "arinc653_partition_probe";
-        case vis_probe_backend_hint_t::POSIX_PSE53_PROBE:
-            return "posix_pse53_probe";
-        case vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE:
-            return "autosar_adaptive_probe";
-        case vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE:
-            return "hypervisor_partition_probe";
-        case vis_probe_backend_hint_t::AUTO:
-        default:
-            return "auto";
-    }
+    strftime(buf, buf_size, "%Y-%m-%dT%H:%M:%SZ", &utc);
 }
 
 static void fill_probe_result(vis_probe_result_t* result,
@@ -396,7 +375,8 @@ static void fill_host_native_target_contract(
         "Target contract matches the current hosted runtime.");
 }
 
-static vis_probe_status_t run_posix_generic_backend(vis_probe_report_t* report) {
+static vis_probe_status_t run_posix_generic_backend(
+    const vis_probe_services_t*, vis_probe_report_t* report) {
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
 
     if (!select_platform_candidate(
@@ -429,7 +409,7 @@ static vis_probe_status_t run_posix_generic_backend(vis_probe_report_t* report) 
 }
 
 static vis_probe_status_t run_arm_generic_timer_backend(
-    vis_probe_report_t* report
+    const vis_probe_services_t*, vis_probe_report_t* report
 ) {
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
 
@@ -467,7 +447,8 @@ static vis_probe_status_t run_arm_generic_timer_backend(
 #endif
 }
 
-static vis_probe_status_t run_linux_x86_backend(vis_probe_report_t* report) {
+static vis_probe_status_t run_linux_x86_backend(
+    const vis_probe_services_t*, vis_probe_report_t* report) {
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
 
 #if defined(__linux__) && (defined(__x86_64__) || defined(__i386__))
@@ -619,7 +600,7 @@ static vis_probe_status_t emit_contract_only_stub(
 }
 
 static vis_probe_status_t run_arinc653_partition_backend(
-    vis_probe_report_t* report
+    const vis_probe_services_t*, vis_probe_report_t* report
 ) {
     return emit_contract_only_stub(
         report,
@@ -638,7 +619,8 @@ static vis_probe_status_t run_arinc653_partition_backend(
         "partition_isolation_not_attested");
 }
 
-static vis_probe_status_t run_posix_pse53_backend(vis_probe_report_t* report) {
+static vis_probe_status_t run_posix_pse53_backend(
+    const vis_probe_services_t*, vis_probe_report_t* report) {
     return emit_contract_only_stub(
         report,
         "posix_pse53_probe",
@@ -657,7 +639,7 @@ static vis_probe_status_t run_posix_pse53_backend(vis_probe_report_t* report) {
 }
 
 static vis_probe_status_t run_autosar_adaptive_backend(
-    vis_probe_report_t* report
+    const vis_probe_services_t*, vis_probe_report_t* report
 ) {
     return emit_contract_only_stub(
         report,
@@ -677,7 +659,7 @@ static vis_probe_status_t run_autosar_adaptive_backend(
 }
 
 static vis_probe_status_t run_hypervisor_partition_backend(
-    vis_probe_report_t* report
+    const vis_probe_services_t*, vis_probe_report_t* report
 ) {
     return emit_contract_only_stub(
         report,
@@ -696,11 +678,114 @@ static vis_probe_status_t run_hypervisor_partition_backend(
         "hypervisor_partition_isolation_not_attested");
 }
 
-struct vis_probe_backend_descriptor_t {
-    vis_probe_backend_hint_t hint;
-    bool auto_candidate;
-    vis_probe_status_t (*run)(vis_probe_report_t* report);
+static vis_probe_backend_descriptor_t backend_descriptors[16] = {
+    {vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR,
+     "linux_x86_rdtscp_msr", true, run_linux_x86_backend},
+    {vis_probe_backend_hint_t::ARM_GENERIC_TIMER,
+     "arm_generic_timer", true, run_arm_generic_timer_backend},
+    {vis_probe_backend_hint_t::POSIX_GENERIC,
+     "posix_generic", true, run_posix_generic_backend},
+    {vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE,
+     "arinc653_partition_probe", false, run_arinc653_partition_backend},
+    {vis_probe_backend_hint_t::POSIX_PSE53_PROBE,
+     "posix_pse53_probe", false, run_posix_pse53_backend},
+    {vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE,
+     "autosar_adaptive_probe", false, run_autosar_adaptive_backend},
+    {vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE,
+     "hypervisor_partition_probe", false, run_hypervisor_partition_backend},
 };
+static uint32_t backend_descriptor_count = 7;
+static constexpr uint32_t max_backend_descriptors = 16;
+static constexpr size_t max_backend_name_size = 128;
+static char owned_backend_names[max_backend_descriptors]
+                               [max_backend_name_size] = {};
+static std::mutex backend_registry_mutex;
+
+static uint32_t snapshot_backend_registry(
+    vis_probe_backend_descriptor_t* descriptors) {
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
+    const uint32_t count = backend_descriptor_count;
+    std::memcpy(descriptors, backend_descriptors,
+                count * sizeof(vis_probe_backend_descriptor_t));
+    return count;
+}
+
+const vis_probe_backend_descriptor_t* vis_probe_backend_registry(
+    uint32_t* count) {
+    thread_local vis_probe_backend_descriptor_t
+        descriptors[max_backend_descriptors];
+    const uint32_t snapshot_count = snapshot_backend_registry(descriptors);
+    if (count != nullptr) *count = snapshot_count;
+    return descriptors;
+}
+
+const char* vis_probe_backend_name(vis_probe_backend_hint_t hint) {
+    if (hint == vis_probe_backend_hint_t::AUTO) return "auto";
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
+    for (uint32_t i = 0; i < backend_descriptor_count; i++) {
+        if (backend_descriptors[i].hint == hint) {
+            return backend_descriptors[i].name;
+        }
+    }
+    return "unknown";
+}
+
+bool vis_probe_backend_parse(const char* name,
+                             vis_probe_backend_hint_t* hint) {
+    if (name == nullptr || hint == nullptr) return false;
+    if (std::strcmp(name, "auto") == 0) {
+        *hint = vis_probe_backend_hint_t::AUTO;
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
+    for (uint32_t i = 0; i < backend_descriptor_count; i++) {
+        if (std::strcmp(name, backend_descriptors[i].name) == 0) {
+            *hint = backend_descriptors[i].hint;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool vis_probe_register_backend(
+    const vis_probe_backend_descriptor_t* descriptor) {
+    if (descriptor == nullptr || descriptor->name == nullptr ||
+        descriptor->name[0] == '\0' || descriptor->run == nullptr ||
+        descriptor->hint == vis_probe_backend_hint_t::AUTO ||
+        std::strlen(descriptor->name) >= max_backend_name_size) {
+        return false;
+    }
+    std::lock_guard<std::mutex> lock(backend_registry_mutex);
+    if (backend_descriptor_count >= max_backend_descriptors) return false;
+    for (uint32_t i = 0; i < backend_descriptor_count; i++) {
+        if (backend_descriptors[i].hint == descriptor->hint ||
+            std::strcmp(backend_descriptors[i].name, descriptor->name) == 0) {
+            return false;
+        }
+    }
+    const uint32_t name_slot = backend_descriptor_count;
+    copy_string(owned_backend_names[name_slot],
+                sizeof(owned_backend_names[name_slot]),
+                descriptor->name);
+    uint32_t descriptor_slot = backend_descriptor_count;
+    if (descriptor->auto_candidate) {
+        for (uint32_t i = 0; i < backend_descriptor_count; i++) {
+            if (backend_descriptors[i].hint ==
+                vis_probe_backend_hint_t::POSIX_GENERIC) {
+                descriptor_slot = i;
+                break;
+            }
+        }
+    }
+    for (uint32_t i = backend_descriptor_count; i > descriptor_slot; i--) {
+        backend_descriptors[i] = backend_descriptors[i - 1];
+    }
+    backend_descriptors[descriptor_slot] = *descriptor;
+    backend_descriptors[descriptor_slot].name =
+        owned_backend_names[name_slot];
+    backend_descriptor_count++;
+    return true;
+}
 
 vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
                                  vis_probe_report_t* report) {
@@ -708,7 +793,8 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
         return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
     }
 
-    const vis_probe_config_t default_config{vis_probe_backend_hint_t::AUTO};
+    const vis_probe_config_t default_config{vis_probe_backend_hint_t::AUTO,
+                                            nullptr};
     const vis_probe_config_t* active = config != nullptr ? config : &default_config;
     std::memset(report, 0, sizeof(vis_probe_report_t));
     copy_string(report->schema_version, sizeof(report->schema_version),
@@ -717,27 +803,27 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
                 "vis-probe " VIS_PROBE_VERSION);
     generate_uuid(report->report_id, sizeof(report->report_id));
     generate_timestamp(report->generated_at, sizeof(report->generated_at));
-    if (vis_platform_detect_profile(&report->platform_profile) < 0) {
+    const vis_probe_services_t default_services{
+        vis_platform_default_adapter(), nullptr, nullptr, nullptr,
+        nullptr, nullptr, nullptr};
+    const vis_probe_services_t* services = active->services != nullptr
+        ? active->services : &default_services;
+    if (vis_platform_detect_profile_with_adapter(
+            services->platform, &report->platform_profile) < 0) {
         copy_string(report->probe_result.selected_backend,
                     sizeof(report->probe_result.selected_backend),
-                    probe_backend_name(active->backend_hint));
+                    vis_probe_backend_name(active->backend_hint));
         return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
     }
 
-    const vis_probe_backend_descriptor_t descriptors[] = {
-        {vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR, true, run_linux_x86_backend},
-        {vis_probe_backend_hint_t::ARM_GENERIC_TIMER, true, run_arm_generic_timer_backend},
-        {vis_probe_backend_hint_t::POSIX_GENERIC, true, run_posix_generic_backend},
-        {vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE, false, run_arinc653_partition_backend},
-        {vis_probe_backend_hint_t::POSIX_PSE53_PROBE, false, run_posix_pse53_backend},
-        {vis_probe_backend_hint_t::AUTOSAR_ADAPTIVE_PROBE, false, run_autosar_adaptive_backend},
-        {vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE, false, run_hypervisor_partition_backend},
-    };
-
+    vis_probe_backend_descriptor_t descriptors[max_backend_descriptors];
+    const uint32_t descriptor_count = snapshot_backend_registry(descriptors);
     auto run_backend = [&](vis_probe_backend_hint_t hint) {
-        for (const vis_probe_backend_descriptor_t& descriptor : descriptors) {
+        for (uint32_t i = 0; i < descriptor_count; i++) {
+            const vis_probe_backend_descriptor_t& descriptor =
+                descriptors[i];
             if (descriptor.hint == hint) {
-                return descriptor.run(report);
+                return descriptor.run(services, report);
             }
         }
         return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
@@ -746,9 +832,11 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
     vis_probe_status_t status =
         vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
     if (active->backend_hint == vis_probe_backend_hint_t::AUTO) {
-        for (const vis_probe_backend_descriptor_t& descriptor : descriptors) {
+        for (uint32_t i = 0; i < descriptor_count; i++) {
+            const vis_probe_backend_descriptor_t& descriptor =
+                descriptors[i];
             if (!descriptor.auto_candidate) continue;
-            status = descriptor.run(report);
+            status = descriptor.run(services, report);
             if (status == vis_probe_status_t::VIS_PROBE_OK) {
                 break;
             }
@@ -760,7 +848,7 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
     if (status != vis_probe_status_t::VIS_PROBE_OK) {
         copy_string(report->probe_result.selected_backend,
                     sizeof(report->probe_result.selected_backend),
-                    probe_backend_name(active->backend_hint));
+                    vis_probe_backend_name(active->backend_hint));
     }
     return status;
 }

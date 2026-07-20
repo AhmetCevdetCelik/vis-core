@@ -11,9 +11,236 @@
 #include "../include/report_schema.hpp"
 #include "../include/vis_probe_semantics.hpp"
 
+#include <cctype>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <vector>
+
+class json_syntax_parser_t {
+public:
+    static constexpr size_t kMaxNestingDepth = 128;
+
+    explicit json_syntax_parser_t(const std::string& json) : json_(json) {}
+
+    bool parse() {
+        skip_whitespace();
+        if (!parse_value(0)) return false;
+        skip_whitespace();
+        return pos_ == json_.size();
+    }
+
+    bool parse_string_document(std::string* value) {
+        skip_whitespace();
+        if (!parse_string(value)) return false;
+        skip_whitespace();
+        return pos_ == json_.size();
+    }
+
+private:
+    void skip_whitespace() {
+        while (pos_ < json_.size() &&
+               (json_[pos_] == ' ' || json_[pos_] == '\t' ||
+                json_[pos_] == '\r' || json_[pos_] == '\n')) {
+            pos_++;
+        }
+    }
+
+    bool consume(char expected) {
+        if (pos_ >= json_.size() || json_[pos_] != expected) return false;
+        pos_++;
+        return true;
+    }
+
+    bool parse_value(size_t depth) {
+        skip_whitespace();
+        if (pos_ >= json_.size() || depth > kMaxNestingDepth) return false;
+        switch (json_[pos_]) {
+            case '{': return parse_object(depth);
+            case '[': return parse_array(depth);
+            case '"': return parse_string();
+            case 't': return parse_literal("true");
+            case 'f': return parse_literal("false");
+            case 'n': return parse_literal("null");
+            default: return parse_number();
+        }
+    }
+
+    bool parse_object(size_t depth) {
+        if (!consume('{')) return false;
+        skip_whitespace();
+        if (consume('}')) return true;
+        std::set<std::string> member_names;
+        while (true) {
+            std::string member_name;
+            if (!parse_string(&member_name) ||
+                !member_names.insert(member_name).second) {
+                return false;
+            }
+            skip_whitespace();
+            if (!consume(':') || !parse_value(depth + 1)) return false;
+            skip_whitespace();
+            if (consume('}')) return true;
+            if (!consume(',')) return false;
+            skip_whitespace();
+        }
+    }
+
+    bool parse_array(size_t depth) {
+        if (!consume('[')) return false;
+        skip_whitespace();
+        if (consume(']')) return true;
+        while (true) {
+            if (!parse_value(depth + 1)) return false;
+            skip_whitespace();
+            if (consume(']')) return true;
+            if (!consume(',')) return false;
+            skip_whitespace();
+        }
+    }
+
+    static void append_utf8(unsigned int code_point, std::string* value) {
+        if (code_point <= 0x7f) {
+            value->push_back(static_cast<char>(code_point));
+        } else if (code_point <= 0x7ff) {
+            value->push_back(static_cast<char>(0xc0 | (code_point >> 6)));
+            value->push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        } else if (code_point <= 0xffff) {
+            value->push_back(static_cast<char>(0xe0 | (code_point >> 12)));
+            value->push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3f)));
+            value->push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        } else {
+            value->push_back(static_cast<char>(0xf0 | (code_point >> 18)));
+            value->push_back(static_cast<char>(0x80 | ((code_point >> 12) & 0x3f)));
+            value->push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3f)));
+            value->push_back(static_cast<char>(0x80 | (code_point & 0x3f)));
+        }
+    }
+
+    bool parse_hex_escape(unsigned int* value) {
+        unsigned int result = 0;
+        for (int i = 0; i < 4; i++) {
+            if (pos_ >= json_.size() ||
+                !std::isxdigit(static_cast<unsigned char>(json_[pos_]))) {
+                return false;
+            }
+            const char c = json_[pos_++];
+            result = (result << 4) |
+                     static_cast<unsigned int>(
+                         c >= '0' && c <= '9' ? c - '0' :
+                         c >= 'a' && c <= 'f' ? c - 'a' + 10 : c - 'A' + 10);
+        }
+        *value = result;
+        return true;
+    }
+
+    bool parse_string(std::string* value = nullptr) {
+        if (!consume('"')) return false;
+        std::string decoded;
+        while (pos_ < json_.size()) {
+            const unsigned char c =
+                static_cast<unsigned char>(json_[pos_++]);
+            if (c == '"') {
+                if (value != nullptr) *value = decoded;
+                return true;
+            }
+            if (c < 0x20) return false;
+            if (c != '\\') {
+                decoded.push_back(static_cast<char>(c));
+                continue;
+            }
+            if (pos_ >= json_.size()) return false;
+            const char escaped = json_[pos_++];
+            if (escaped == 'u') {
+                unsigned int code_point = 0;
+                if (!parse_hex_escape(&code_point)) return false;
+                if (code_point >= 0xd800 && code_point <= 0xdbff) {
+                    if (pos_ + 2 > json_.size() || json_[pos_] != '\\' ||
+                        json_[pos_ + 1] != 'u') {
+                        return false;
+                    }
+                    pos_ += 2;
+                    unsigned int low = 0;
+                    if (!parse_hex_escape(&low) || low < 0xdc00 ||
+                        low > 0xdfff) {
+                        return false;
+                    }
+                    code_point = 0x10000 + ((code_point - 0xd800) << 10) +
+                                 (low - 0xdc00);
+                } else if (code_point >= 0xdc00 && code_point <= 0xdfff) {
+                    return false;
+                }
+                append_utf8(code_point, &decoded);
+            } else if (escaped != '"' && escaped != '\\' && escaped != '/' &&
+                       escaped != 'b' && escaped != 'f' && escaped != 'n' &&
+                       escaped != 'r' && escaped != 't') {
+                return false;
+            } else {
+                static const char escaped_values[] = {
+                    '"', '\\', '/', '\b', '\f', '\n', '\r', '\t'};
+                static const char escaped_names[] = {
+                    '"', '\\', '/', 'b', 'f', 'n', 'r', 't'};
+                for (size_t i = 0; i < sizeof(escaped_names); i++) {
+                    if (escaped == escaped_names[i]) {
+                        decoded.push_back(escaped_values[i]);
+                        break;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    bool parse_number() {
+        const size_t begin = pos_;
+        if (pos_ < json_.size() && json_[pos_] == '-') pos_++;
+        if (pos_ >= json_.size()) return false;
+        if (json_[pos_] == '0') {
+            pos_++;
+        } else if (json_[pos_] >= '1' && json_[pos_] <= '9') {
+            while (pos_ < json_.size() && std::isdigit(
+                       static_cast<unsigned char>(json_[pos_]))) {
+                pos_++;
+            }
+        } else {
+            return false;
+        }
+        if (pos_ < json_.size() && json_[pos_] == '.') {
+            pos_++;
+            const size_t fraction = pos_;
+            while (pos_ < json_.size() && std::isdigit(
+                       static_cast<unsigned char>(json_[pos_]))) {
+                pos_++;
+            }
+            if (pos_ == fraction) return false;
+        }
+        if (pos_ < json_.size() &&
+            (json_[pos_] == 'e' || json_[pos_] == 'E')) {
+            pos_++;
+            if (pos_ < json_.size() &&
+                (json_[pos_] == '+' || json_[pos_] == '-')) {
+                pos_++;
+            }
+            const size_t exponent = pos_;
+            while (pos_ < json_.size() && std::isdigit(
+                       static_cast<unsigned char>(json_[pos_]))) {
+                pos_++;
+            }
+            if (pos_ == exponent) return false;
+        }
+        return pos_ > begin;
+    }
+
+    bool parse_literal(const char* literal) {
+        const size_t length = std::char_traits<char>::length(literal);
+        if (json_.compare(pos_, length, literal) != 0) return false;
+        pos_ += length;
+        return true;
+    }
+
+    const std::string& json_;
+    size_t pos_ = 0;
+};
 
 static bool extract_json_string_field(const std::string& json,
                                       const std::string& field,
@@ -28,12 +255,10 @@ static bool extract_json_string_field(const std::string& json,
     size_t quote = json.find('"', colon + 1);
     if (quote == std::string::npos) return false;
 
-    std::string out;
     bool escaped = false;
     for (size_t i = quote + 1; i < json.size(); i++) {
         const char c = json[i];
         if (escaped) {
-            out.push_back(c);
             escaped = false;
             continue;
         }
@@ -42,10 +267,9 @@ static bool extract_json_string_field(const std::string& json,
             continue;
         }
         if (c == '"') {
-            if (value) *value = out;
-            return true;
+            const std::string encoded = json.substr(quote, i - quote + 1);
+            return json_syntax_parser_t(encoded).parse_string_document(value);
         }
-        out.push_back(c);
     }
     return false;
 }
@@ -67,102 +291,6 @@ static bool find_json_field_colon(const std::string& json,
     return false;
 }
 
-static bool extract_root_level_string_field(const std::string& json,
-                                            const std::string& root,
-                                            const std::string& field,
-                                            std::string* value) {
-    const std::string root_needle = "\"" + root + "\"";
-    size_t root_pos = json.find(root_needle);
-    if (root_pos == std::string::npos) return false;
-
-    size_t root_colon = json.find(':', root_pos + root_needle.size());
-    if (root_colon == std::string::npos) return false;
-    size_t root_open = json.find('{', root_colon + 1);
-    if (root_open == std::string::npos) return false;
-
-    bool in_string = false;
-    bool escaped = false;
-    int depth = 1;
-    for (size_t i = root_open + 1; i < json.size(); i++) {
-        const char c = json[i];
-        if (in_string) {
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (c == '\\') {
-                escaped = true;
-                continue;
-            }
-            if (c == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-
-        if (c == '"') {
-            if (depth == 1) {
-                std::string key;
-                bool key_escaped = false;
-                size_t end = i + 1;
-                for (; end < json.size(); end++) {
-                    const char kc = json[end];
-                    if (key_escaped) {
-                        key.push_back(kc);
-                        key_escaped = false;
-                        continue;
-                    }
-                    if (kc == '\\') {
-                        key_escaped = true;
-                        continue;
-                    }
-                    if (kc == '"') break;
-                    key.push_back(kc);
-                }
-                if (end >= json.size()) return false;
-                size_t after = json.find_first_not_of(" \t\r\n", end + 1);
-                if (after != std::string::npos && json[after] == ':' &&
-                    key == field) {
-                    size_t quote = json.find('"', after + 1);
-                    if (quote == std::string::npos) return false;
-                    std::string out;
-                    bool value_escaped = false;
-                    for (size_t v = quote + 1; v < json.size(); v++) {
-                        const char vc = json[v];
-                        if (value_escaped) {
-                            out.push_back(vc);
-                            value_escaped = false;
-                            continue;
-                        }
-                        if (vc == '\\') {
-                            value_escaped = true;
-                            continue;
-                        }
-                        if (vc == '"') {
-                            if (value != nullptr) *value = out;
-                            return true;
-                        }
-                        out.push_back(vc);
-                    }
-                    return false;
-                }
-                i = end;
-                continue;
-            }
-            in_string = true;
-            continue;
-        }
-
-        if (c == '{' || c == '[') {
-            depth++;
-        } else if (c == '}' || c == ']') {
-            depth--;
-            if (depth == 0) return false;
-        }
-    }
-    return false;
-}
-
 static bool json_bool_field_is_true(const std::string& json,
                                     const std::string& field) {
     size_t colon = 0;
@@ -176,6 +304,161 @@ static bool json_bool_field_is_true(const std::string& json,
 static bool json_has_field(const std::string& json,
                            const std::string& field) {
     return find_json_field_colon(json, field, nullptr);
+}
+
+enum class json_value_type_t {
+    string,
+    object,
+    other,
+};
+
+struct json_member_t {
+    json_value_type_t type = json_value_type_t::other;
+    size_t value_begin = 0;
+    size_t value_end = 0;
+};
+
+static bool find_matching_json_delimiter(const std::string& json,
+                                         size_t open,
+                                         char opening,
+                                         char closing,
+                                         size_t* close_out) {
+    bool in_string = false;
+    bool escaped = false;
+    int depth = 0;
+    for (size_t i = open; i < json.size(); i++) {
+        const char c = json[i];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+        } else if (c == opening) {
+            depth++;
+        } else if (c == closing && --depth == 0) {
+            if (close_out != nullptr) *close_out = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool find_direct_json_member(const std::string& json,
+                                    size_t object_begin,
+                                    size_t object_end,
+                                    const std::string& field,
+                                    json_member_t* member) {
+    size_t i = object_begin + 1;
+    while (i < object_end) {
+        i = json.find_first_not_of(" \t\r\n,", i);
+        if (i == std::string::npos || i >= object_end || json[i] != '"') {
+            return false;
+        }
+
+        size_t key_end = i + 1;
+        bool escaped = false;
+        for (; key_end < object_end; key_end++) {
+            const char c = json[key_end];
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                break;
+            }
+        }
+        if (key_end >= object_end) return false;
+        const std::string encoded_key =
+            json.substr(i, key_end - i + 1);
+        std::string key;
+        if (!json_syntax_parser_t(encoded_key).parse_string_document(&key)) {
+            return false;
+        }
+
+        size_t colon = json.find_first_not_of(" \t\r\n", key_end + 1);
+        if (colon == std::string::npos || colon >= object_end ||
+            json[colon] != ':') {
+            return false;
+        }
+        size_t value = json.find_first_not_of(" \t\r\n", colon + 1);
+        if (value == std::string::npos || value >= object_end) return false;
+
+        json_member_t current;
+        current.value_begin = value;
+        if (json[value] == '"') {
+            current.type = json_value_type_t::string;
+            size_t end = value + 1;
+            bool value_escaped = false;
+            for (; end < object_end; end++) {
+                const char c = json[end];
+                if (value_escaped) {
+                    value_escaped = false;
+                } else if (c == '\\') {
+                    value_escaped = true;
+                } else if (c == '"') {
+                    break;
+                }
+            }
+            if (end >= object_end) return false;
+            current.value_end = end;
+        } else if (json[value] == '{') {
+            current.type = json_value_type_t::object;
+            if (!find_matching_json_delimiter(json, value, '{', '}',
+                                              &current.value_end) ||
+                current.value_end > object_end) {
+                return false;
+            }
+        } else if (json[value] == '[') {
+            if (!find_matching_json_delimiter(json, value, '[', ']',
+                                              &current.value_end) ||
+                current.value_end > object_end) {
+                return false;
+            }
+        } else {
+            current.value_end = json.find_first_of(",}", value);
+            if (current.value_end == std::string::npos ||
+                current.value_end > object_end) {
+                return false;
+            }
+            current.value_end--;
+        }
+
+        if (key == field) {
+            if (member != nullptr) *member = current;
+            return true;
+        }
+        i = current.value_end + 1;
+    }
+    return false;
+}
+
+static bool extract_direct_json_string(const std::string& json,
+                                       size_t object_begin,
+                                       size_t object_end,
+                                       const std::string& field,
+                                       std::string* value) {
+    json_member_t member;
+    if (!find_direct_json_member(json, object_begin, object_end, field,
+                                 &member) ||
+        member.type != json_value_type_t::string) {
+        return false;
+    }
+    if (value != nullptr) {
+        const std::string encoded =
+            json.substr(member.value_begin,
+                        member.value_end - member.value_begin + 1);
+        if (!json_syntax_parser_t(encoded).parse_string_document(value)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 static std::string detect_report_type(const std::string& json) {
@@ -218,13 +501,11 @@ static std::string detect_report_type(const std::string& json) {
 
         if (c == '"') {
             if (depth == 1) {
-                std::string key;
                 bool key_escaped = false;
                 size_t end = i + 1;
                 for (; end < json.size(); end++) {
                     const char kc = json[end];
                     if (key_escaped) {
-                        key.push_back(kc);
                         key_escaped = false;
                         continue;
                     }
@@ -233,13 +514,18 @@ static std::string detect_report_type(const std::string& json) {
                         continue;
                     }
                     if (kc == '"') break;
-                    key.push_back(kc);
                 }
                 if (end >= json.size()) break;
 
                 size_t after = json.find_first_not_of(" \t\r\n", end + 1);
                 if (after != std::string::npos && json[after] == ':') {
-                    top_level_keys.push_back(key);
+                    const std::string encoded_key =
+                        json.substr(i, end - i + 1);
+                    std::string key;
+                    if (json_syntax_parser_t(encoded_key)
+                            .parse_string_document(&key)) {
+                        top_level_keys.push_back(key);
+                    }
                 }
                 i = end;
                 continue;
@@ -288,33 +574,88 @@ static void validate_probe_report_semantics(
     const std::string& json,
     vis_report_validation_result_t* result
 ) {
-    if (!json_has_field(json, "platform_profile")) {
-        result->errors.push_back("missing required field: platform_profile");
+    size_t document_begin = json.find_first_not_of(" \t\r\n");
+    size_t document_end = 0;
+    json_member_t report;
+    if (document_begin == std::string::npos || json[document_begin] != '{' ||
+        !find_matching_json_delimiter(json, document_begin, '{', '}',
+                                      &document_end) ||
+        !find_direct_json_member(json, document_begin, document_end,
+                                 "vis_probe_report", &report) ||
+        report.type != json_value_type_t::object) {
+        result->errors.push_back("vis_probe_report must be an object");
+        return;
     }
-    if (!json_has_field(json, "execution_profile")) {
-        result->errors.push_back("missing required field: execution_profile");
+
+    struct required_section_t {
+        const char* name;
+        const char* const* fields;
+        size_t field_count;
+    };
+    static const char* kPlatformFields[] = {"selected_time_source"};
+    static const char* kExecutionFields[] = {"execution_environment"};
+    static const char* kProbeResultFields[] = {
+        "selected_backend", "backend_status", "timer_evidence_level",
+        "execution_evidence_level",
+    };
+    static const char* kTargetFields[] = {
+        "target_profile_family", "target_runtime_api_status",
+    };
+    static const required_section_t kSections[] = {
+        {"platform_profile", kPlatformFields, 1},
+        {"execution_profile", kExecutionFields, 1},
+        {"probe_result", kProbeResultFields, 4},
+        {"target_contract", kTargetFields, 2},
+    };
+
+    json_member_t sections[4];
+    for (size_t section_index = 0; section_index < 4; section_index++) {
+        const required_section_t& required = kSections[section_index];
+        if (!find_direct_json_member(json, report.value_begin,
+                                     report.value_end, required.name,
+                                     &sections[section_index]) ||
+            sections[section_index].type != json_value_type_t::object) {
+            result->errors.push_back(
+                std::string("required section must be an object: ") +
+                required.name);
+            continue;
+        }
+        for (size_t field_index = 0; field_index < required.field_count;
+             field_index++) {
+            if (!extract_direct_json_string(
+                    json, sections[section_index].value_begin,
+                    sections[section_index].value_end,
+                    required.fields[field_index], nullptr)) {
+                result->errors.push_back(
+                    std::string("missing or non-string required field: ") +
+                    required.name + "." + required.fields[field_index]);
+            }
+        }
     }
-    if (!json_has_field(json, "probe_result")) {
-        result->errors.push_back("missing required field: probe_result");
-    }
-    if (!json_has_field(json, "target_contract")) {
-        result->errors.push_back("missing required field: target_contract");
-    }
-    if (!extract_root_level_string_field(json, "vis_probe_report",
-                                         "evidence_level",
-                                         &result->evidence_level)) {
+
+    if (!extract_direct_json_string(json, report.value_begin, report.value_end,
+                                    "evidence_level",
+                                    &result->evidence_level)) {
         result->errors.push_back("missing required field: evidence_level");
         return;
     }
-    extract_json_string_field(json, "backend_status", &result->backend_status);
-    extract_json_string_field(json, "timer_evidence_level",
-                              &result->timer_evidence_level);
-    extract_json_string_field(json, "execution_evidence_level",
-                              &result->execution_evidence_level);
-    extract_json_string_field(json, "target_profile_family",
-                              &result->target_profile_family);
-    extract_json_string_field(json, "target_runtime_api_status",
-                              &result->target_runtime_api_status);
+    extract_direct_json_string(json, sections[2].value_begin,
+                               sections[2].value_end, "backend_status",
+                               &result->backend_status);
+    extract_direct_json_string(json, sections[2].value_begin,
+                               sections[2].value_end, "timer_evidence_level",
+                               &result->timer_evidence_level);
+    extract_direct_json_string(json, sections[2].value_begin,
+                               sections[2].value_end,
+                               "execution_evidence_level",
+                               &result->execution_evidence_level);
+    extract_direct_json_string(json, sections[3].value_begin,
+                               sections[3].value_end, "target_profile_family",
+                               &result->target_profile_family);
+    extract_direct_json_string(json, sections[3].value_begin,
+                               sections[3].value_end,
+                               "target_runtime_api_status",
+                               &result->target_runtime_api_status);
 
     if (!vis_probe_evidence_level_is_valid(result->evidence_level)) {
         result->errors.push_back("invalid probe evidence_level: " +
@@ -346,12 +687,13 @@ static void validate_probe_report_semantics(
     }
 
     std::string selected_time_source;
-    extract_json_string_field(json, "selected_time_source",
-                              &selected_time_source);
+    extract_direct_json_string(json, sections[0].value_begin,
+                               sections[0].value_end, "selected_time_source",
+                               &selected_time_source);
     if (result->evidence_level == "linux_x86_rich_evidence" &&
-        selected_time_source == "posix_clock_monotonic") {
+        selected_time_source != "x86_rdtscp") {
         result->errors.push_back(
-            "linux_x86_rich_evidence cannot rely on posix_clock_monotonic");
+            "linux_x86_rich_evidence must rely on x86_rdtscp");
     }
     if (result->evidence_level == "arm_generic_timer_evidence" &&
         selected_time_source != "arm_cntvct_el0") {
@@ -536,6 +878,11 @@ bool vis_report_validate_json(const std::string& json,
         return false;
     }
 
+    if (!json_syntax_parser_t(json).parse()) {
+        result->errors.push_back("input is not valid JSON");
+        return false;
+    }
+
     result->report_type = detect_report_type(json);
     if (result->report_type.empty()) {
         result->errors.push_back("no known VIS report root object found");
@@ -543,13 +890,28 @@ bool vis_report_validate_json(const std::string& json,
         result->errors.push_back("multiple VIS report root objects found");
     }
 
-    if (!extract_json_string_field(json,
-                                   "schema_version",
-                                   &result->schema_version)) {
+    size_t document_begin = json.find_first_not_of(" \t\r\n");
+    size_t document_end = 0;
+    json_member_t report;
+    const bool report_object_found =
+        !result->report_type.empty() && result->report_type != "ambiguous" &&
+        document_begin != std::string::npos && json[document_begin] == '{' &&
+        find_matching_json_delimiter(json, document_begin, '{', '}',
+                                     &document_end) &&
+        find_direct_json_member(json, document_begin, document_end,
+                                result->report_type, &report) &&
+        report.type == json_value_type_t::object;
+
+    if (!report_object_found ||
+        !extract_direct_json_string(json, report.value_begin, report.value_end,
+                                    "schema_version",
+                                    &result->schema_version)) {
         result->errors.push_back("missing string field: schema_version");
     }
 
-    if (!extract_json_string_field(json, "generator", &result->generator)) {
+    if (!report_object_found ||
+        !extract_direct_json_string(json, report.value_begin, report.value_end,
+                                    "generator", &result->generator)) {
         result->errors.push_back("missing string field: generator");
     }
 

@@ -8,15 +8,138 @@
 
 #include "../include/vis_probe.hpp"
 
+#include <atomic>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <thread>
+#include <vector>
 
 static bool empty(const char* value) {
     return value == nullptr || value[0] == '\0';
 }
 
+static vis_probe_status_t run_test_backend(
+    const vis_probe_services_t* services, vis_probe_report_t* report) {
+    if (services == nullptr || services->target_context == nullptr ||
+        *static_cast<const int*>(services->target_context) != 42) {
+        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
+    }
+    std::snprintf(report->probe_result.selected_backend,
+                  sizeof(report->probe_result.selected_backend),
+                  "test_target");
+    return vis_probe_status_t::VIS_PROBE_OK;
+}
+
+static vis_probe_status_t run_auto_test_backend(
+    const vis_probe_services_t*, vis_probe_report_t* report) {
+    std::snprintf(report->probe_result.selected_backend,
+                  sizeof(report->probe_result.selected_backend),
+                  "auto_test_target");
+    return vis_probe_status_t::VIS_PROBE_OK;
+}
+
 int main() {
+    const vis_probe_backend_hint_t test_hint =
+        static_cast<vis_probe_backend_hint_t>(100);
+    const vis_probe_backend_descriptor_t test_backend{
+        test_hint, "test_target", false, run_test_backend};
+    if (!vis_probe_register_backend(&test_backend) ||
+        std::strcmp(vis_probe_backend_name(test_hint), "test_target") != 0) {
+        std::printf("[test] FAILED: backend registry rejected target adapter.\n");
+        return 1;
+    }
+
+    char transient_name[] = "transient_target";
+    const vis_probe_backend_hint_t transient_hint =
+        static_cast<vis_probe_backend_hint_t>(101);
+    const vis_probe_backend_descriptor_t transient_backend{
+        transient_hint, transient_name, false, run_test_backend};
+    if (!vis_probe_register_backend(&transient_backend)) {
+        std::printf("[test] FAILED: transient backend registration failed.\n");
+        return 1;
+    }
+    std::memset(transient_name, 'x', sizeof(transient_name) - 1);
+    if (std::strcmp(vis_probe_backend_name(transient_hint),
+                    "transient_target") != 0) {
+        std::printf("[test] FAILED: backend registry did not own its name.\n");
+        return 1;
+    }
+    vis_probe_backend_hint_t parsed_hint = vis_probe_backend_hint_t::AUTO;
+    if (!vis_probe_backend_parse("test_target", &parsed_hint) ||
+        parsed_hint != test_hint) {
+        std::printf("[test] FAILED: backend registry did not drive parsing.\n");
+        return 1;
+    }
+    const int target_context = 42;
+    const vis_probe_services_t test_services{
+        vis_platform_default_adapter(),
+        const_cast<int*>(&target_context),
+        nullptr, nullptr, nullptr, nullptr, nullptr};
+    const vis_probe_config_t test_config{test_hint, &test_services};
+
+    std::atomic<bool> registry_failed{false};
+    std::vector<std::thread> registry_readers;
+    for (int i = 0; i < 4; i++) {
+        registry_readers.emplace_back([&]() {
+            for (int j = 0; j < 1000; j++) {
+                vis_probe_backend_hint_t parsed = vis_probe_backend_hint_t::AUTO;
+                if (!vis_probe_backend_parse("test_target", &parsed) ||
+                    parsed != test_hint) {
+                    registry_failed.store(true, std::memory_order_relaxed);
+                }
+                uint32_t count = 0;
+                const vis_probe_backend_descriptor_t* backends =
+                    vis_probe_backend_registry(&count);
+                for (uint32_t k = 0; k < count; k++) {
+                    if (backends[k].name == nullptr ||
+                        backends[k].name[0] == '\0' ||
+                        backends[k].run == nullptr) {
+                        registry_failed.store(true,
+                                              std::memory_order_relaxed);
+                    }
+                }
+            }
+        });
+    }
+    std::vector<std::thread> registry_writers;
+    for (int i = 0; i < 4; i++) {
+        registry_writers.emplace_back([&, i]() {
+            char name[32];
+            std::snprintf(name, sizeof(name), "concurrent_target_%d", i);
+            const vis_probe_backend_descriptor_t backend{
+                static_cast<vis_probe_backend_hint_t>(110 + i),
+                name, false, run_test_backend};
+            if (!vis_probe_register_backend(&backend)) {
+                registry_failed.store(true, std::memory_order_relaxed);
+            }
+        });
+    }
+    for (std::thread& reader : registry_readers) reader.join();
+    for (std::thread& writer : registry_writers) writer.join();
+    for (int i = 0; i < 4; i++) {
+        char expected_name[32];
+        std::snprintf(expected_name, sizeof(expected_name),
+                      "concurrent_target_%d", i);
+        if (std::strcmp(vis_probe_backend_name(
+                            static_cast<vis_probe_backend_hint_t>(110 + i)),
+                        expected_name) != 0) {
+            registry_failed.store(true, std::memory_order_relaxed);
+        }
+    }
+    if (registry_failed.load(std::memory_order_relaxed)) {
+        std::printf("[test] FAILED: concurrent backend registry access failed.\n");
+        return 1;
+    }
+    vis_probe_report_t test_report;
+    if (vis_probe_run(&test_config, &test_report) !=
+            vis_probe_status_t::VIS_PROBE_OK ||
+        std::strcmp(test_report.probe_result.selected_backend,
+                    "test_target") != 0) {
+        std::printf("[test] FAILED: backend services were not injected.\n");
+        return 1;
+    }
+
     if (vis_probe_run(nullptr, nullptr) !=
         vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG) {
         std::printf("[test] FAILED: null report should be invalid arg.\n");
@@ -146,6 +269,43 @@ int main() {
         return 1;
     }
 #endif
+
+    const vis_probe_backend_hint_t auto_test_hint =
+        static_cast<vis_probe_backend_hint_t>(102);
+    const vis_probe_backend_descriptor_t auto_test_backend{
+        auto_test_hint, "auto_test_target", true, run_auto_test_backend};
+    if (!vis_probe_register_backend(&auto_test_backend)) {
+        std::printf("[test] FAILED: automatic backend registration failed.\n");
+        return 1;
+    }
+    uint32_t backend_count = 0;
+    const vis_probe_backend_descriptor_t* backends =
+        vis_probe_backend_registry(&backend_count);
+    uint32_t auto_test_index = backend_count;
+    uint32_t posix_index = backend_count;
+    for (uint32_t i = 0; i < backend_count; i++) {
+        if (backends[i].hint == auto_test_hint) auto_test_index = i;
+        if (backends[i].hint == vis_probe_backend_hint_t::POSIX_GENERIC) {
+            posix_index = i;
+        }
+    }
+    if (auto_test_index >= posix_index) {
+        std::printf("[test] FAILED: registered automatic backend follows "
+                    "POSIX fallback.\n");
+        return 1;
+    }
+    if (std::strcmp(auto_report.probe_result.selected_backend,
+                    "posix_generic") == 0) {
+        vis_probe_report_t registered_auto_report;
+        status = vis_probe_run(nullptr, &registered_auto_report);
+        if (status != vis_probe_status_t::VIS_PROBE_OK ||
+            std::strcmp(registered_auto_report.probe_result.selected_backend,
+                        "auto_test_target") != 0) {
+            std::printf("[test] FAILED: registered automatic backend was not "
+                        "selected before POSIX fallback.\n");
+            return 1;
+        }
+    }
 
     vis_probe_config_t arinc_config{
         vis_probe_backend_hint_t::ARINC653_PARTITION_PROBE};

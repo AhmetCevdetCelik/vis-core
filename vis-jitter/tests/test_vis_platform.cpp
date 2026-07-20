@@ -15,7 +15,24 @@ static bool empty(const char* value) {
     return value == nullptr || value[0] == '\0';
 }
 
+static int fake_detect(void* context, vis_platform_profile_t* profile) {
+    std::memset(profile, 0, sizeof(*profile));
+    std::snprintf(profile->arch, sizeof(profile->arch), "%s",
+                  static_cast<const char*>(context));
+    return 0;
+}
+
 int main() {
+    const vis_platform_adapter_t fake_adapter{
+        const_cast<char*>("fake_rtos"), fake_detect};
+    vis_platform_profile_t fake_profile;
+    if (vis_platform_detect_profile_with_adapter(&fake_adapter,
+                                                 &fake_profile) != 0 ||
+        std::strcmp(fake_profile.arch, "fake_rtos") != 0) {
+        std::printf("[test] FAILED: injected platform adapter was not used.\n");
+        return 1;
+    }
+
     vis_platform_profile_t profile;
     if (vis_platform_detect_profile(&profile) != 0) {
         std::printf("[test] FAILED: platform profile detection failed.\n");
@@ -70,6 +87,18 @@ int main() {
     }
     if (!has_available_candidate) {
         std::printf("[test] FAILED: no usable timing candidate was found.\n");
+        return 1;
+    }
+
+    const char* expected_claim = "portable_user_space";
+    if (std::strcmp(profile.selected_time_source, "x86_rdtscp") == 0) {
+        expected_claim = "linux_x86_rich_evidence";
+    } else if (std::strcmp(profile.selected_time_source,
+                           "arm_cntvct_el0") == 0) {
+        expected_claim = "arm_generic_timer_evidence";
+    }
+    if (std::strcmp(profile.claim_level, expected_claim) != 0) {
+        std::printf("[test] FAILED: claim level does not match selected timer.\n");
         return 1;
     }
 

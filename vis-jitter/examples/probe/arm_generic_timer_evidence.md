@@ -1,8 +1,11 @@
 # arm_generic_timer_evidence
 
-This example shows a future-looking ARM evidence shape without pretending it is
-already a target RTOS backend.
+This example is a validator-compatible synthetic report that represents the
+intended AArch64 generic timer path.
 
-- Measures: hosted ARM timer behavior
-- Does not measure: partition scheduling, target RTOS APIs, or temporal isolation
-- Why useful: proves the report schema can carry non-x86 timer evidence
+- Host timing evidence is `arm_generic_timer_evidence`
+- Target contract is still hosted, not RTOS-attested
+- Execution evidence remains `portable_user_space`
+
+It demonstrates how VIS should describe an ARM path without claiming RTOS
+partition or temporal isolation evidence.
