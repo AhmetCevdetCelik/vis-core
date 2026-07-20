@@ -31,6 +31,17 @@ int main() {
         return 1;
     }
 
+    const std::string escaped_member_names =
+        "{\"vis\\u005fmem_probe_report\":{"
+        "\"schema\\u005fversion\":\"0.1\","
+        "\"generator\":\"vis-mem-probe 0.1.0\"}}";
+    if (!vis_report_validate_json(escaped_member_names, &result) ||
+        result.report_type != "vis_mem_probe_report" ||
+        result.schema_version != "0.1") {
+        std::fprintf(stderr, "[test] escaped member names were rejected\n");
+        return 1;
+    }
+
     const std::string old_core =
         "{\n"
         "  \"vis_report\": {\n"

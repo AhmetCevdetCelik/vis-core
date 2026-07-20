@@ -375,7 +375,12 @@ static bool find_direct_json_member(const std::string& json,
             }
         }
         if (key_end >= object_end) return false;
-        const std::string key = json.substr(i + 1, key_end - i - 1);
+        const std::string encoded_key =
+            json.substr(i, key_end - i + 1);
+        std::string key;
+        if (!json_syntax_parser_t(encoded_key).parse_string_document(&key)) {
+            return false;
+        }
 
         size_t colon = json.find_first_not_of(" \t\r\n", key_end + 1);
         if (colon == std::string::npos || colon >= object_end ||
@@ -496,13 +501,11 @@ static std::string detect_report_type(const std::string& json) {
 
         if (c == '"') {
             if (depth == 1) {
-                std::string key;
                 bool key_escaped = false;
                 size_t end = i + 1;
                 for (; end < json.size(); end++) {
                     const char kc = json[end];
                     if (key_escaped) {
-                        key.push_back(kc);
                         key_escaped = false;
                         continue;
                     }
@@ -511,13 +514,18 @@ static std::string detect_report_type(const std::string& json) {
                         continue;
                     }
                     if (kc == '"') break;
-                    key.push_back(kc);
                 }
                 if (end >= json.size()) break;
 
                 size_t after = json.find_first_not_of(" \t\r\n", end + 1);
                 if (after != std::string::npos && json[after] == ':') {
-                    top_level_keys.push_back(key);
+                    const std::string encoded_key =
+                        json.substr(i, end - i + 1);
+                    std::string key;
+                    if (json_syntax_parser_t(encoded_key)
+                            .parse_string_document(&key)) {
+                        top_level_keys.push_back(key);
+                    }
                 }
                 i = end;
                 continue;
