@@ -513,6 +513,9 @@ static vis_probe_status_t run_linux_x86_backend(
     if (report == nullptr) return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
 
 #if defined(__linux__) && (defined(__x86_64__) || defined(__i386__))
+    if (std::strcmp(report->platform_profile.os_family, "linux") != 0) {
+        return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
+    }
     if (!select_platform_candidate(
             &report->platform_profile,
             "x86_rdtscp",

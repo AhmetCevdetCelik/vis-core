@@ -518,7 +518,8 @@ static int hosted_detect_profile(void*, vis_platform_profile_t* profile) {
                 "platform_specific");
 #endif
 
-    if (std::strcmp(profile->selected_time_source, "x86_rdtscp") == 0) {
+    if (std::strcmp(profile->os_family, "linux") == 0 &&
+        std::strcmp(profile->selected_time_source, "x86_rdtscp") == 0) {
         copy_string(profile->claim_level, sizeof(profile->claim_level),
                     "linux_x86_rich_evidence");
         copy_string(profile->limitations, sizeof(profile->limitations),
