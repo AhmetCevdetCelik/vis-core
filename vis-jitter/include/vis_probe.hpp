@@ -13,13 +13,15 @@
 
 #include <cstdint>
 
-#define VIS_PROBE_VERSION "0.1.0"
+#define VIS_PROBE_VERSION "0.2.0"
+#define VIS_PROBE_SERVICES_API_VERSION 1u
 
 enum class vis_probe_status_t : int {
     VIS_PROBE_OK = 0,
     VIS_PROBE_ERR_INVALID_ARG = -1,
     VIS_PROBE_ERR_BACKEND_UNAVAILABLE = -2,
     VIS_PROBE_ERR_NO_TIME_SOURCE = -3,
+    VIS_PROBE_ERR_TARGET_SERVICE = -4,
 };
 
 enum class vis_probe_backend_hint_t : int {
@@ -31,6 +33,42 @@ enum class vis_probe_backend_hint_t : int {
     POSIX_PSE53_PROBE = 5,
     AUTOSAR_ADAPTIVE_PROBE = 6,
     HYPERVISOR_PARTITION_PROBE = 7,
+    TARGET_SERVICES_PROBE = 8,
+};
+
+enum class vis_probe_service_status_t : int {
+    OK = 0,
+    UNAVAILABLE = -1,
+    PERMISSION_DENIED = -2,
+    BUFFER_TOO_SMALL = -3,
+    READ_FAILED = -4,
+    INVALID_ARG = -5,
+};
+
+enum class vis_probe_target_profile_t : uint32_t {
+    UNSPECIFIED = 0,
+    GENERIC = 1,
+    POSIX_PSE53 = 2,
+    ARINC653 = 3,
+};
+
+enum vis_probe_target_capability_t : uint32_t {
+    VIS_PROBE_TARGET_CAP_TIMER = 1u << 0,
+    VIS_PROBE_TARGET_CAP_SCHEDULER = 1u << 1,
+    VIS_PROBE_TARGET_CAP_PARTITION = 1u << 2,
+    VIS_PROBE_TARGET_CAP_PRIVILEGE = 1u << 3,
+    VIS_PROBE_TARGET_CAP_RUNTIME = 1u << 4,
+};
+
+struct vis_probe_timer_info_t {
+    char name[64];
+    // frequency_hz may be zero only when unit already expresses absolute time.
+    uint64_t frequency_hz;
+    char unit[16];
+    uint32_t counter_width_bits;
+    bool monotonic;
+    bool wraps;
+    char privilege_requirement[48];
 };
 
 struct vis_execution_profile_t {
@@ -63,6 +101,13 @@ struct vis_probe_result_t {
     char execution_evidence_level[48];
     char unsupported_reason[160];
     char limitations[256];
+    uint64_t timer_frequency_hz;
+    char timer_unit[16];
+    uint32_t timer_counter_width_bits;
+    bool timer_wraps;
+    char timer_metadata_status[32];
+    uint32_t required_capabilities;
+    uint32_t available_capabilities;
 };
 
 struct vis_target_contract_t {
@@ -110,11 +155,30 @@ struct vis_probe_config_t {
 struct vis_probe_services_t {
     const vis_platform_adapter_t* platform;
     void* target_context;
+    // Legacy timer hook retained for source compatibility. New target
+    // backends should use timer_read and query_timer so failures and timer
+    // properties can be represented explicitly.
     uint64_t (*timer_now)(void* context);
     int (*query_scheduler)(void* context, char* value, uint32_t value_size);
     int (*query_partition)(void* context, char* value, uint32_t value_size);
     int (*query_privilege)(void* context, char* value, uint32_t value_size);
     int (*query_runtime)(void* context, char* value, uint32_t value_size);
+    // Appended fields preserve existing aggregate-initializer source
+    // compatibility. Set both fields when using the v1 callbacks below.
+    uint32_t api_version = 0;
+    uint32_t struct_size = 0;
+    // v1 callbacks return a vis_probe_service_status_t value. Successful
+    // string queries must NUL-terminate value; use BUFFER_TOO_SMALL rather
+    // than truncating output.
+    int (*timer_read)(void* context, uint64_t* value) = nullptr;
+    int (*query_timer)(void* context, vis_probe_timer_info_t* info) = nullptr;
+    // A non-UNSPECIFIED profile is the explicit intent required for AUTO to
+    // consider target_services_probe. Explicit backend selection may use
+    // GENERIC defaults when this field is absent or UNSPECIFIED.
+    vis_probe_target_profile_t target_profile = vis_probe_target_profile_t::UNSPECIFIED;
+    // Zero selects the default requirement set for target_profile. A nonzero
+    // mask is the complete requirement contract and replaces those defaults.
+    uint32_t required_capabilities = 0;
 };
 
 using vis_probe_backend_runner_t = vis_probe_status_t (*)(

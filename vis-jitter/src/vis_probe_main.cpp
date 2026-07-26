@@ -18,6 +18,7 @@ static void print_usage(const char* argv0) {
                  "\n"
                  "Options:\n"
                  "  --backend <auto|posix_generic|linux_x86_rdtscp_msr|arm_generic_timer|\n"
+                 "             target_services_probe|\n"
                  "             arinc653_partition_probe|posix_pse53_probe|\n"
                  "             autosar_adaptive_probe|hypervisor_partition_probe>\n"
                  "                         Probe backend selection (default: auto)\n"

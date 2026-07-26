@@ -9,6 +9,7 @@
 #include "../include/vis_probe.hpp"
 
 #include <atomic>
+#include <cstddef>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -445,7 +446,8 @@ static vis_probe_status_t run_posix_generic_backend(
             "posix_clock_monotonic",
             "portable",
             "portable_user_space",
-            "Portable probe records user-space timing evidence only; partitioned RTOS and architecture-specific counters require dedicated backends.",
+            "Portable probe records user-space timing evidence only; partitioned RTOS and "
+            "architecture-specific counters require dedicated backends.",
             "platform_specific")) {
         return vis_probe_status_t::VIS_PROBE_ERR_NO_TIME_SOURCE;
     }
@@ -466,6 +468,9 @@ static vis_probe_status_t run_posix_generic_backend(
                       "none",
                       report->platform_profile.limitations,
                       &report->platform_profile);
+    copy_string(report->probe_result.timer_unit, sizeof(report->probe_result.timer_unit), "ns");
+    copy_string(report->probe_result.timer_metadata_status,
+                sizeof(report->probe_result.timer_metadata_status), "normalized_api_unit");
     return vis_probe_status_t::VIS_PROBE_OK;
 }
 
@@ -480,7 +485,8 @@ static vis_probe_status_t run_arm_generic_timer_backend(
             "arm_cntvct_el0",
             "architecture_counter",
             "arm_generic_timer_evidence",
-            "Portable probe records ARM generic timer evidence only; RTOS interrupt models and partition timing still require target-specific probe backends.",
+            "Portable probe records ARM generic timer evidence only; RTOS interrupt models and "
+            "partition timing still require target-specific probe backends.",
             "el0_counter_no_privileged_attestation")) {
         return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
     }
@@ -501,6 +507,11 @@ static vis_probe_status_t run_arm_generic_timer_backend(
                       "none",
                       report->platform_profile.limitations,
                       &report->platform_profile);
+    copy_string(report->probe_result.timer_unit, sizeof(report->probe_result.timer_unit), "ticks");
+    report->probe_result.timer_counter_width_bits = 64;
+    report->probe_result.timer_wraps = true;
+    copy_string(report->probe_result.timer_metadata_status,
+                sizeof(report->probe_result.timer_metadata_status), "frequency_not_collected");
     return vis_probe_status_t::VIS_PROBE_OK;
 #else
     (void)report;
@@ -521,7 +532,8 @@ static vis_probe_status_t run_linux_x86_backend(
             "x86_rdtscp",
             "architecture_counter",
             "linux_x86_rich_evidence",
-            "Portable probe records timing-source evidence only; SMI-backed jitter measurement remains a vis-jitter workflow.",
+                                   "Portable probe records timing-source evidence only; SMI-backed "
+                                   "jitter measurement remains a vis-jitter workflow.",
             "msr_requires_root_or_cap_sys_rawio")) {
         return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
     }
@@ -542,11 +554,425 @@ static vis_probe_status_t run_linux_x86_backend(
                       "none",
                       report->platform_profile.limitations,
                       &report->platform_profile);
+    copy_string(report->probe_result.timer_unit, sizeof(report->probe_result.timer_unit), "cycles");
+    report->probe_result.timer_counter_width_bits = 64;
+    report->probe_result.timer_wraps = true;
+    copy_string(report->probe_result.timer_metadata_status,
+                sizeof(report->probe_result.timer_metadata_status), "frequency_not_collected");
     return vis_probe_status_t::VIS_PROBE_OK;
 #else
     (void)report;
     return vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE;
 #endif
+}
+
+static bool target_services_v1_available(const vis_probe_services_t* services) {
+    const size_t required_size =
+        offsetof(vis_probe_services_t, query_timer) + sizeof(services->query_timer);
+    return services != nullptr && services->api_version >= VIS_PROBE_SERVICES_API_VERSION &&
+           services->struct_size >= required_size;
+}
+
+static bool target_services_profile_fields_available(const vis_probe_services_t* services) {
+    const size_t required_size = offsetof(vis_probe_services_t, required_capabilities) +
+                                 sizeof(services->required_capabilities);
+    return target_services_v1_available(services) && services->struct_size >= required_size;
+}
+
+static bool target_profile_is_valid(vis_probe_target_profile_t profile) {
+    return profile == vis_probe_target_profile_t::UNSPECIFIED ||
+           profile == vis_probe_target_profile_t::GENERIC ||
+           profile == vis_probe_target_profile_t::POSIX_PSE53 ||
+           profile == vis_probe_target_profile_t::ARINC653;
+}
+
+static vis_probe_target_profile_t target_profile(const vis_probe_services_t* services) {
+    if (!target_services_profile_fields_available(services) ||
+        !target_profile_is_valid(services->target_profile) ||
+        services->target_profile == vis_probe_target_profile_t::UNSPECIFIED) {
+        return vis_probe_target_profile_t::GENERIC;
+    }
+    return services->target_profile;
+}
+
+static const char* target_profile_name(vis_probe_target_profile_t profile) {
+    switch (profile) {
+    case vis_probe_target_profile_t::POSIX_PSE53:
+        return "posix_pse53";
+    case vis_probe_target_profile_t::ARINC653:
+        return "arinc653";
+    case vis_probe_target_profile_t::GENERIC:
+    case vis_probe_target_profile_t::UNSPECIFIED:
+        return "target_services_generic";
+    }
+    return "target_services_generic";
+}
+
+static uint32_t target_required_capabilities(const vis_probe_services_t* services,
+                                             vis_probe_target_profile_t profile) {
+    if (target_services_profile_fields_available(services) &&
+        services->required_capabilities != 0) {
+        return services->required_capabilities;
+    }
+    uint32_t required = VIS_PROBE_TARGET_CAP_TIMER | VIS_PROBE_TARGET_CAP_SCHEDULER |
+                        VIS_PROBE_TARGET_CAP_PRIVILEGE | VIS_PROBE_TARGET_CAP_RUNTIME;
+    if (profile == vis_probe_target_profile_t::ARINC653) {
+        required |= VIS_PROBE_TARGET_CAP_PARTITION;
+    }
+    return required;
+}
+
+static bool target_services_auto_intended(const vis_probe_services_t* services) {
+    return target_services_profile_fields_available(services) &&
+           target_profile_is_valid(services->target_profile) &&
+           services->target_profile != vis_probe_target_profile_t::UNSPECIFIED;
+}
+
+static void append_service_issue(char* issues, size_t issues_size, const char* issue) {
+    if (issues == nullptr || issues_size == 0 || issue == nullptr || issue[0] == '\0') {
+        return;
+    }
+    const size_t used = std::strlen(issues);
+    if (used >= issues_size - 1)
+        return;
+    std::snprintf(issues + used, issues_size - used, "%s%s", used == 0 ? "" : "; ", issue);
+}
+
+static void service_status_issue(const char* service_name, int status, char* issue,
+                                 size_t issue_size) {
+    const char* category = "callback_failed";
+    if (status == static_cast<int>(vis_probe_service_status_t::UNAVAILABLE)) {
+        category = "runtime_api_missing";
+    } else if (status == static_cast<int>(vis_probe_service_status_t::PERMISSION_DENIED)) {
+        category = "permission_denied";
+    } else if (status == static_cast<int>(vis_probe_service_status_t::BUFFER_TOO_SMALL)) {
+        category = "buffer_too_small";
+    } else if (status == static_cast<int>(vis_probe_service_status_t::READ_FAILED)) {
+        category = "read_failed";
+    } else if (status == static_cast<int>(vis_probe_service_status_t::INVALID_ARG)) {
+        category = "invalid_service_argument";
+    }
+    std::snprintf(issue, issue_size, "%s: %s", category, service_name);
+}
+
+static vis_probe_status_t
+fail_target_services_backend(vis_probe_report_t* report, vis_probe_status_t return_status,
+                             const char* profile_name, uint32_t required_capabilities,
+                             const char* backend_status, const char* reason,
+                             const char* unsupported_reason) {
+    fill_common_execution_profile(&report->execution_profile, &report->platform_profile);
+    copy_string(report->execution_profile.portability_tier,
+                sizeof(report->execution_profile.portability_tier), "target_services_contract");
+    fill_target_contract(&report->target_contract, profile_name, "target_timer_service",
+                         "target_scheduler_service", "target_partition_service",
+                         "target_privilege_service", "collection_not_reached", "not_claimed",
+                         "not_claimed", "not_claimed", "not_claimed",
+                         "Target-services collection did not produce usable "
+                         "timer evidence.");
+    fill_probe_result(&report->probe_result, "target_services_probe", backend_status, reason,
+                      "target_service_required", "contract_only", "contract_only", "contract_only",
+                      unsupported_reason,
+                      "Target callback failure prevented runtime evidence "
+                      "collection.",
+                      &report->platform_profile);
+    copy_string(report->platform_profile.claim_level, sizeof(report->platform_profile.claim_level),
+                "contract_only");
+    report->probe_result.required_capabilities = required_capabilities;
+    report->probe_result.available_capabilities = 0;
+    copy_string(report->probe_result.timer_metadata_status,
+                sizeof(report->probe_result.timer_metadata_status), "not_collected");
+    return return_status;
+}
+
+static void add_target_timer_candidate(vis_platform_profile_t* profile,
+                                       const vis_probe_timer_info_t* timer) {
+    if (profile == nullptr || timer == nullptr || profile->candidate_count >= 4) {
+        return;
+    }
+    vis_time_source_candidate_t* candidate = &profile->candidates[profile->candidate_count++];
+    std::memset(candidate, 0, sizeof(*candidate));
+    copy_string(candidate->name, sizeof(candidate->name), timer->name);
+    candidate->available = true;
+    candidate->monotonic = timer->monotonic;
+    copy_string(candidate->evidence_level, sizeof(candidate->evidence_level), "target_timer");
+    copy_string(candidate->reason, sizeof(candidate->reason),
+                "Target timer metadata and reads were collected through "
+                "versioned target services.");
+}
+
+static bool target_timer_reads_forward(uint64_t first, uint64_t second,
+                                       const vis_probe_timer_info_t* timer) {
+    if (second >= first)
+        return true;
+    if (timer == nullptr || !timer->wraps || timer->counter_width_bits == 0 ||
+        timer->counter_width_bits > 64) {
+        return false;
+    }
+    if (timer->counter_width_bits == 64) {
+        const uint64_t delta = second - first;
+        return delta <= (uint64_t{1} << 63);
+    }
+    const uint64_t modulus = uint64_t{1} << timer->counter_width_bits;
+    const uint64_t mask = modulus - 1;
+    const uint64_t delta = (second - first) & mask;
+    return delta <= (modulus >> 1);
+}
+
+static vis_probe_status_t run_target_services_backend(const vis_probe_services_t* services,
+                                                      vis_probe_report_t* report) {
+    if (report == nullptr)
+        return vis_probe_status_t::VIS_PROBE_ERR_INVALID_ARG;
+    copy_string(report->schema_version, sizeof(report->schema_version),
+                VIS_PROBE_REPORT_SCHEMA_VERSION);
+    const vis_probe_target_profile_t profile = target_profile(services);
+    const char* profile_name = target_profile_name(profile);
+    const uint32_t required = target_required_capabilities(services, profile);
+    if (target_services_profile_fields_available(services) &&
+        !target_profile_is_valid(services->target_profile)) {
+        return fail_target_services_backend(
+            report, vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE, profile_name, required,
+            "collection_failed", "The target profile value is invalid.", "invalid_target_profile");
+    }
+    constexpr uint32_t known_capabilities =
+        VIS_PROBE_TARGET_CAP_TIMER | VIS_PROBE_TARGET_CAP_SCHEDULER |
+        VIS_PROBE_TARGET_CAP_PARTITION | VIS_PROBE_TARGET_CAP_PRIVILEGE |
+        VIS_PROBE_TARGET_CAP_RUNTIME;
+    if ((required & ~known_capabilities) != 0) {
+        return fail_target_services_backend(
+            report, vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE, profile_name, required,
+            "collection_failed", "The required target capability mask contains unknown bits.",
+            "invalid_required_capability_mask");
+    }
+    if (!target_services_v1_available(services)) {
+        return fail_target_services_backend(
+            report, vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE, profile_name, required,
+            "recognized_api_missing", "Versioned target services are unavailable.",
+            "callback_missing: services_v1");
+    }
+    if (services->timer_read == nullptr || services->query_timer == nullptr) {
+        return fail_target_services_backend(
+            report, vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE, profile_name, required,
+            "recognized_api_missing", "The required target timer callbacks are missing.",
+            services->timer_read == nullptr ? "callback_missing: timer_read"
+                                            : "callback_missing: query_timer");
+    }
+
+    vis_probe_timer_info_t timer{};
+    int status = services->query_timer(services->target_context, &timer);
+    if (status != static_cast<int>(vis_probe_service_status_t::OK)) {
+        char issue[96];
+        service_status_issue("query_timer", status, issue, sizeof(issue));
+        const bool unavailable =
+            status == static_cast<int>(vis_probe_service_status_t::UNAVAILABLE);
+        return fail_target_services_backend(
+            report,
+            unavailable ? vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE
+                        : vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE,
+            profile_name, required,
+            status == static_cast<int>(vis_probe_service_status_t::PERMISSION_DENIED)
+                ? "permission_denied"
+                : "collection_failed",
+            "Target timer metadata collection failed.", issue);
+    }
+    if (timer.name[0] == '\0' || (timer.frequency_hz == 0 && timer.unit[0] == '\0') ||
+        timer.counter_width_bits == 0 || timer.counter_width_bits > 64 ||
+        timer.privilege_requirement[0] == '\0' || !timer.monotonic) {
+        return fail_target_services_backend(
+            report, vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE, profile_name, required,
+            "collection_failed", "Target timer metadata is incomplete or non-monotonic.",
+            !timer.monotonic ? "unusable_timer: non_monotonic" : "invalid_timer_metadata");
+    }
+
+    uint64_t first = 0;
+    uint64_t second = 0;
+    status = services->timer_read(services->target_context, &first);
+    if (status == static_cast<int>(vis_probe_service_status_t::OK)) {
+        status = services->timer_read(services->target_context, &second);
+    }
+    if (status != static_cast<int>(vis_probe_service_status_t::OK)) {
+        char issue[96];
+        service_status_issue("timer_read", status, issue, sizeof(issue));
+        return fail_target_services_backend(
+            report, vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE, profile_name, required,
+            status == static_cast<int>(vis_probe_service_status_t::PERMISSION_DENIED)
+                ? "permission_denied"
+                : "collection_failed",
+            "Target timer read failed.", issue);
+    }
+    if (!target_timer_reads_forward(first, second, &timer)) {
+        return fail_target_services_backend(
+            report, vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE, profile_name, required,
+            "collection_failed", "Target timer reads were not monotonic.",
+            "unusable_timer: decreasing_read");
+    }
+
+    copy_string(report->platform_profile.selected_time_source,
+                sizeof(report->platform_profile.selected_time_source), timer.name);
+    copy_string(report->platform_profile.time_source_evidence_level,
+                sizeof(report->platform_profile.time_source_evidence_level), "target_timer");
+    report->platform_profile.time_source_monotonic = true;
+    copy_string(report->platform_profile.timer_access_model,
+                sizeof(report->platform_profile.timer_access_model), "target_service_callback");
+    copy_string(report->platform_profile.privileged_counters,
+                sizeof(report->platform_profile.privileged_counters), timer.privilege_requirement);
+    add_target_timer_candidate(&report->platform_profile, &timer);
+
+    char scheduler[48] = {};
+    char partition[48] = {};
+    char privilege[48] = {};
+    char runtime[48] = {};
+    char issues[160] = {};
+    uint32_t available = VIS_PROBE_TARGET_CAP_TIMER;
+    bool fatal_query_failure = false;
+    bool fatal_permission_denied = false;
+    bool optional_evidence_degraded = false;
+    auto query = [&](const char* name, uint32_t capability, int (*callback)(void*, char*, uint32_t),
+                     char* value, uint32_t value_size) {
+        const bool capability_required = (required & capability) != 0;
+        if (callback == nullptr) {
+            if (!capability_required) {
+                copy_string(value, value_size, "not_required_for_profile");
+                return static_cast<int>(vis_probe_service_status_t::UNAVAILABLE);
+            }
+            char issue[96];
+            std::snprintf(issue, sizeof(issue), "callback_missing: %s", name);
+            append_service_issue(issues, sizeof(issues), issue);
+            return static_cast<int>(vis_probe_service_status_t::UNAVAILABLE);
+        }
+        const int query_status = callback(services->target_context, value, value_size);
+        if (query_status != static_cast<int>(vis_probe_service_status_t::OK)) {
+            if (query_status == static_cast<int>(vis_probe_service_status_t::UNAVAILABLE) &&
+                !capability_required) {
+                copy_string(value, value_size, "not_required_for_profile");
+                return query_status;
+            }
+            char issue[96];
+            service_status_issue(name, query_status, issue, sizeof(issue));
+            append_service_issue(issues, sizeof(issues), issue);
+            if (query_status == static_cast<int>(vis_probe_service_status_t::PERMISSION_DENIED)) {
+                if (capability_required) {
+                    fatal_query_failure = true;
+                    fatal_permission_denied = true;
+                } else {
+                    optional_evidence_degraded = true;
+                }
+            }
+            if (query_status == static_cast<int>(vis_probe_service_status_t::READ_FAILED) ||
+                query_status == static_cast<int>(vis_probe_service_status_t::INVALID_ARG) ||
+                (query_status != static_cast<int>(vis_probe_service_status_t::UNAVAILABLE) &&
+                 query_status != static_cast<int>(vis_probe_service_status_t::PERMISSION_DENIED) &&
+                 query_status != static_cast<int>(vis_probe_service_status_t::BUFFER_TOO_SMALL))) {
+                fatal_query_failure = true;
+            }
+        } else if (value[0] == '\0') {
+            char issue[96];
+            std::snprintf(issue, sizeof(issue), "empty_output: %s", name);
+            append_service_issue(issues, sizeof(issues), issue);
+            fatal_query_failure = true;
+            return static_cast<int>(vis_probe_service_status_t::READ_FAILED);
+        } else {
+            available |= capability;
+        }
+        return query_status;
+    };
+
+    const int scheduler_status = query("query_scheduler", VIS_PROBE_TARGET_CAP_SCHEDULER,
+                                       services->query_scheduler, scheduler, sizeof(scheduler));
+    const int partition_status = query("query_partition", VIS_PROBE_TARGET_CAP_PARTITION,
+                                       services->query_partition, partition, sizeof(partition));
+    const int privilege_status = query("query_privilege", VIS_PROBE_TARGET_CAP_PRIVILEGE,
+                                       services->query_privilege, privilege, sizeof(privilege));
+    const int runtime_status = query("query_runtime", VIS_PROBE_TARGET_CAP_RUNTIME,
+                                     services->query_runtime, runtime, sizeof(runtime));
+    const int ok = static_cast<int>(vis_probe_service_status_t::OK);
+    const bool collection_complete =
+        (available & required) == required && !optional_evidence_degraded;
+    const uint32_t execution_required =
+        required & (VIS_PROBE_TARGET_CAP_SCHEDULER | VIS_PROBE_TARGET_CAP_PARTITION |
+                    VIS_PROBE_TARGET_CAP_RUNTIME);
+    const bool execution_complete = (available & execution_required) == execution_required;
+
+    fill_common_execution_profile(&report->execution_profile, &report->platform_profile);
+    if (runtime_status == ok) {
+        copy_string(report->execution_profile.execution_environment,
+                    sizeof(report->execution_profile.execution_environment), runtime);
+        copy_string(report->execution_profile.runtime_isolation_model,
+                    sizeof(report->execution_profile.runtime_isolation_model), runtime);
+    }
+    if (scheduler_status == ok) {
+        copy_string(report->execution_profile.scheduler_surface,
+                    sizeof(report->execution_profile.scheduler_surface), scheduler);
+    }
+    if (partition_status == ok) {
+        copy_string(report->execution_profile.partition_model,
+                    sizeof(report->execution_profile.partition_model), partition);
+    }
+    copy_string(report->execution_profile.scheduling_scope,
+                sizeof(report->execution_profile.scheduling_scope), "target_runtime");
+    copy_string(report->execution_profile.portability_tier,
+                sizeof(report->execution_profile.portability_tier), "target_services_probe");
+
+    const char* runtime_api_status = "available_collection_failed";
+    if (runtime_status == ok) {
+        runtime_api_status = "host_native";
+    } else if (runtime_status == static_cast<int>(vis_probe_service_status_t::UNAVAILABLE)) {
+        runtime_api_status = "recognized_api_missing";
+    } else if (runtime_status == static_cast<int>(vis_probe_service_status_t::PERMISSION_DENIED)) {
+        runtime_api_status = "permission_denied";
+    }
+    fill_target_contract(
+        &report->target_contract, profile_name, timer.name,
+        scheduler_status == ok ? scheduler : "query_incomplete",
+        partition_status == ok
+            ? partition
+            : ((required & VIS_PROBE_TARGET_CAP_PARTITION) == 0 ? "not_required_for_profile"
+                                                                : "query_incomplete"),
+        privilege_status == ok ? privilege : timer.privilege_requirement, runtime_api_status,
+        "not_claimed", "not_claimed", "not_claimed", "not_claimed",
+        collection_complete ? "Target timer and execution services were collected."
+                            : "Target timer was collected, but one or more execution "
+                              "services were incomplete.");
+
+    const char* evidence_level =
+        collection_complete ? "rtos_execution_surface" : "partial_target_evidence";
+    const char* execution_level =
+        execution_complete ? "rtos_execution_surface" : "partial_rtos_execution_surface";
+    copy_string(report->platform_profile.claim_level, sizeof(report->platform_profile.claim_level),
+                evidence_level);
+    copy_string(report->platform_profile.limitations, sizeof(report->platform_profile.limitations),
+                collection_complete ? "Target services report execution surfaces; temporal "
+                                      "isolation and certification remain out of scope."
+                                    : "Partial target evidence does not attest the missing "
+                                      "execution or privilege surfaces.");
+    fill_probe_result(
+        &report->probe_result, "target_services_probe",
+        collection_complete ? "selected" : "partial_evidence",
+        collection_complete ? "Target timer and execution services were collected."
+                            : "Target timer was collected with partial execution evidence.",
+        privilege_status == ok ? privilege : timer.privilege_requirement, evidence_level,
+        "target_timer", execution_level, issues[0] == '\0' ? "none" : issues,
+        report->platform_profile.limitations, &report->platform_profile);
+    report->probe_result.timer_frequency_hz = timer.frequency_hz;
+    copy_string(report->probe_result.timer_unit, sizeof(report->probe_result.timer_unit),
+                timer.unit);
+    report->probe_result.timer_counter_width_bits = timer.counter_width_bits;
+    report->probe_result.timer_wraps = timer.wraps;
+    copy_string(report->probe_result.timer_metadata_status,
+                sizeof(report->probe_result.timer_metadata_status), "reported_by_target");
+    report->probe_result.required_capabilities = required;
+    report->probe_result.available_capabilities = available;
+    if (fatal_query_failure) {
+        copy_string(report->probe_result.backend_status,
+                    sizeof(report->probe_result.backend_status),
+                    fatal_permission_denied ? "permission_denied" : "collection_failed");
+        copy_string(report->probe_result.backend_status_reason,
+                    sizeof(report->probe_result.backend_status_reason),
+                    fatal_permission_denied ? "A required target capability query was denied."
+                                            : "A target service adapter returned invalid output "
+                                              "or an internal read failure.");
+        return vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE;
+    }
+    return vis_probe_status_t::VIS_PROBE_OK;
 }
 
 static void override_execution_surface(vis_execution_profile_t* execution,
@@ -663,6 +1089,8 @@ static vis_probe_status_t emit_contract_only_stub(
     copy_string(report->platform_profile.limitations,
                 sizeof(report->platform_profile.limitations),
                 report->probe_result.limitations);
+    copy_string(report->probe_result.timer_metadata_status,
+                sizeof(report->probe_result.timer_metadata_status), "not_collected");
     return vis_probe_status_t::VIS_PROBE_OK;
 }
 
@@ -746,6 +1174,8 @@ static vis_probe_status_t run_hypervisor_partition_backend(
 }
 
 static vis_probe_backend_descriptor_t backend_descriptors[16] = {
+    {vis_probe_backend_hint_t::TARGET_SERVICES_PROBE, "target_services_probe", true,
+     run_target_services_backend},
     {vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR,
      "linux_x86_rdtscp_msr", true, run_linux_x86_backend},
     {vis_probe_backend_hint_t::ARM_GENERIC_TIMER,
@@ -761,8 +1191,8 @@ static vis_probe_backend_descriptor_t backend_descriptors[16] = {
     {vis_probe_backend_hint_t::HYPERVISOR_PARTITION_PROBE,
      "hypervisor_partition_probe", false, run_hypervisor_partition_backend},
 };
-static uint32_t backend_descriptor_count = 7;
-static constexpr uint32_t max_backend_descriptors = 16;
+static uint32_t backend_descriptor_count = 8;
+static constexpr uint32_t max_backend_descriptors = 24;
 static constexpr size_t max_backend_name_size = 128;
 static char owned_backend_names[max_backend_descriptors]
                                [max_backend_name_size] = {};
@@ -903,14 +1333,18 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
             const vis_probe_backend_descriptor_t& descriptor =
                 descriptors[i];
             if (!descriptor.auto_candidate) continue;
+            if (descriptor.hint == vis_probe_backend_hint_t::TARGET_SERVICES_PROBE &&
+                !target_services_auto_intended(services)) {
+                continue;
+            }
             vis_probe_report_t candidate_report = *report;
             status = descriptor.run(services, &candidate_report);
             if (status == vis_probe_status_t::VIS_PROBE_OK) {
                 *report = candidate_report;
                 break;
             }
-            if (status !=
-                vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE) {
+            if (status != vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE) {
+                *report = candidate_report;
                 break;
             }
         }
@@ -918,7 +1352,8 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
         status = run_backend(active->backend_hint);
     }
 
-    if (status != vis_probe_status_t::VIS_PROBE_OK) {
+    if (status != vis_probe_status_t::VIS_PROBE_OK &&
+        report->probe_result.selected_backend[0] == '\0') {
         copy_string(report->probe_result.selected_backend,
                     sizeof(report->probe_result.selected_backend),
                     vis_probe_backend_name(active->backend_hint));
@@ -1025,6 +1460,8 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
     std::string privilege_requirement = json_escape(r->privilege_requirement);
     std::string evidence_level = json_escape(r->evidence_level);
     std::string timer_evidence_level = json_escape(r->timer_evidence_level);
+    std::string timer_unit = json_escape(r->timer_unit);
+    std::string timer_metadata_status = json_escape(r->timer_metadata_status);
     std::string execution_evidence_level =
         json_escape(r->execution_evidence_level);
     std::string unsupported_reason = json_escape(r->unsupported_reason);
@@ -1139,6 +1576,13 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
         "      \"selected_time_source\": \"%s\",\n"
         "      \"time_source_monotonic\": %s,\n"
         "      \"time_source_read_overhead_ns\": %.1f,\n"
+        "      \"timer_frequency_hz\": %llu,\n"
+        "      \"timer_unit\": \"%s\",\n"
+        "      \"timer_counter_width_bits\": %u,\n"
+        "      \"timer_wraps\": %s,\n"
+        "      \"timer_metadata_status\": \"%s\",\n"
+        "      \"required_capabilities\": %u,\n"
+        "      \"available_capabilities\": %u,\n"
         "      \"privilege_requirement\": \"%s\",\n"
         "      \"timer_evidence_level\": \"%s\",\n"
         "      \"execution_evidence_level\": \"%s\",\n"
@@ -1217,6 +1661,9 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
         probe_selected_time_source.c_str(),
         r->time_source_monotonic ? "true" : "false",
         r->time_source_read_overhead_ns,
+        static_cast<unsigned long long>(r->timer_frequency_hz), timer_unit.c_str(),
+        r->timer_counter_width_bits, r->timer_wraps ? "true" : "false",
+        timer_metadata_status.c_str(), r->required_capabilities, r->available_capabilities,
         privilege_requirement.c_str(),
         timer_evidence_level.c_str(),
         execution_evidence_level.c_str(),

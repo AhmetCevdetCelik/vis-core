@@ -233,7 +233,13 @@ int main() {
         std::strcmp(posix_report.probe_result.backend_status,
                     "selected") != 0 ||
         std::strcmp(posix_report.platform_profile.selected_time_source,
-                    "posix_clock_monotonic") != 0) {
+                    "posix_clock_monotonic") != 0 ||
+        posix_report.probe_result.timer_frequency_hz != 0 ||
+        std::strcmp(posix_report.probe_result.timer_unit, "ns") != 0 ||
+        posix_report.probe_result.timer_counter_width_bits != 0 ||
+        posix_report.probe_result.timer_wraps ||
+        std::strcmp(posix_report.probe_result.timer_metadata_status, "normalized_api_unit") != 0 ||
+        std::strcmp(posix_report.schema_version, VIS_REPORT_SCHEMA_VERSION) != 0) {
         std::printf("[test] FAILED: posix backend fields are wrong.\n");
         return 1;
     }
@@ -264,7 +270,7 @@ int main() {
         vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR};
     vis_probe_report_t x86_report;
     status = vis_probe_run(&x86_config, &x86_report);
-#if defined(__linux__)
+    const bool hosted_linux = std::strcmp(x86_report.platform_profile.os_family, "linux") == 0;if(hosted_linux) {
     bool rdtscp_usable = false;
     for (uint32_t i = 0; i < x86_report.platform_profile.candidate_count; i++) {
         const vis_time_source_candidate_t& candidate =
@@ -276,7 +282,10 @@ int main() {
     if (rdtscp_usable &&
         (status != vis_probe_status_t::VIS_PROBE_OK ||
          std::strcmp(x86_report.probe_result.selected_backend,
-                     "linux_x86_rdtscp_msr") != 0)) {
+                     "linux_x86_rdtscp_msr") != 0 ||
+             x86_report.probe_result.timer_frequency_hz != 0 ||
+             std::strcmp(x86_report.probe_result.timer_metadata_status,
+                         "frequency_not_collected") != 0)) {
         std::printf("[test] FAILED: usable RDTSCP backend was not selected.\n");
         return 1;
     }
@@ -287,15 +296,16 @@ int main() {
         std::printf("[test] FAILED: unavailable RDTSCP should fall back to POSIX.\n");
         return 1;
     }
-#else
+    }else {
     if (status != vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE ||
         std::strcmp(auto_report.probe_result.selected_backend,
                     "posix_generic") != 0 ||
-        std::strcmp(auto_report.platform_profile.os_family, "posix") != 0) {
+        std::strcmp(auto_report.probe_result.evidence_level, "portable_user_space") != 0 ||
+            std::strcmp(auto_report.platform_profile.claim_level, "linux_x86_rich_evidence") == 0) {
         std::printf("[test] FAILED: non-Linux x86 should use the POSIX backend.\n");
         return 1;
     }
-#endif
+    }
 #elif defined(__aarch64__)
     vis_probe_config_t arm_config{
         vis_probe_backend_hint_t::ARM_GENERIC_TIMER};
@@ -305,7 +315,10 @@ int main() {
         (std::strcmp(arm_report.probe_result.selected_backend,
                      "arm_generic_timer") != 0 ||
          std::strcmp(arm_report.probe_result.evidence_level,
-                     "arm_generic_timer_evidence") != 0)) {
+                     "arm_generic_timer_evidence") != 0 ||
+         arm_report.probe_result.timer_frequency_hz != 0 ||
+         std::strcmp(arm_report.probe_result.timer_metadata_status, "frequency_not_collected") !=
+             0)) {
         std::printf("[test] FAILED: available ARM backend fields are wrong.\n");
         return 1;
     }
@@ -433,6 +446,9 @@ int main() {
                     "arinc653") != 0 ||
         std::strcmp(arinc_report.target_contract.target_runtime_api_status,
                     "recognized_api_missing") != 0 ||
+        arinc_report.probe_result.timer_frequency_hz != 0 ||
+        arinc_report.probe_result.timer_unit[0] != '\0' ||
+        std::strcmp(arinc_report.probe_result.timer_metadata_status, "not_collected") != 0 ||
         std::strstr(arinc_report.probe_result.unsupported_reason,
                     "arinc653_partition_services") == nullptr) {
         std::printf("[test] FAILED: ARINC stub backend contract is wrong.\n");
@@ -452,6 +468,7 @@ int main() {
             nullptr ||
         std::strstr(json, "\"backend_status\": \"selected\"") ==
             nullptr ||
+        std::strstr(json, "\"timer_unit\": \"ns\"") == nullptr ||
         std::strstr(json, "\"target_contract\"") == nullptr ||
         std::strstr(json, "\"claim_gates\"") == nullptr ||
         std::strstr(json, "\"target_profile_family\": \"hosted_posix\"") ==

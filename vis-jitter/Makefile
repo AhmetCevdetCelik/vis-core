@@ -91,6 +91,8 @@ TEST_REPORT_SUMMARY := test_report_summary
 TEST_API := test_public_api
 TEST_PROBE := test_vis_probe
 TEST_PROBE_POSIX := test_vis_probe_posix
+TEST_PROBE_ANDROID := test_vis_probe_android
+TEST_TARGET_SERVICES := test_target_services_probe
 TEST_PLATFORM := test_vis_platform
 TEST_DOCTOR := test_doctor
 
@@ -117,7 +119,7 @@ $(REPORT_BUNDLE_BIN): $(REPORT_BUNDLE_SRCS) $(HDRS)
 $(REPORT_SUMMARY_BIN): $(REPORT_SUMMARY_SRCS) $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ $(REPORT_SUMMARY_SRCS)
 
-test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PROBE_POSIX) $(TEST_PLATFORM) $(TEST_DOCTOR)
+test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PROBE_POSIX) $(TEST_PROBE_ANDROID) $(TEST_TARGET_SERVICES) $(TEST_PLATFORM) $(TEST_DOCTOR)
 	@echo "Running test_histogram..."
 	./$(TEST_HIST)
 	@echo ""
@@ -144,6 +146,12 @@ test: $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTO
 	@echo ""
 	@echo "Running test_vis_probe_posix..."
 	./$(TEST_PROBE_POSIX)
+	@echo ""
+	@echo "Running test_vis_probe_android..."
+	./$(TEST_PROBE_ANDROID)
+	@echo ""
+	@echo "Running test_target_services_probe..."
+	./$(TEST_TARGET_SERVICES)
 	@echo ""
 	@echo "Running test_vis_platform..."
 	./$(TEST_PLATFORM)
@@ -188,6 +196,12 @@ $(TEST_PROBE): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(PLATFOR
 $(TEST_PROBE_POSIX): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(PLATFORM_SRCS) $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
 	$(CXX) $(CXXFLAGS) -U__linux__ -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(PLATFORM_SRCS)
 
+$(TEST_PROBE_ANDROID): $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(PLATFORM_SRCS) $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
+	$(CXX) $(CXXFLAGS) -D__ANDROID__ -o $@ $(TEST_DIR)/test_vis_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(PLATFORM_SRCS)
+
+$(TEST_TARGET_SERVICES): $(TEST_DIR)/test_target_services_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/report_validator.cpp $(PLATFORM_SRCS) $(INC_DIR)/vis_probe.hpp $(INC_DIR)/vis_platform.hpp
+	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_target_services_probe.cpp $(SRC_DIR)/vis_probe.cpp $(SRC_DIR)/vis_probe_semantics.cpp $(SRC_DIR)/report_validator.cpp $(PLATFORM_SRCS)
+
 $(TEST_PLATFORM): $(TEST_DIR)/test_vis_platform.cpp $(PLATFORM_SRCS) $(INC_DIR)/vis_platform.hpp
 	$(CXX) $(CXXFLAGS) -o $@ $(TEST_DIR)/test_vis_platform.cpp $(PLATFORM_SRCS)
 
@@ -208,6 +222,6 @@ docs-check:
 	../scripts/check-doc-links.sh
 
 clean:
-	rm -f $(TARGET) $(PROBE_BIN) $(DOCTOR_BIN) $(REPORT_VALIDATE_BIN) $(REPORT_REDACT_BIN) $(REPORT_BUNDLE_BIN) $(REPORT_SUMMARY_BIN) $(TEST_SMI) $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PROBE_POSIX) $(TEST_PLATFORM) $(TEST_DOCTOR)
+	rm -f $(TARGET) $(PROBE_BIN) $(DOCTOR_BIN) $(REPORT_VALIDATE_BIN) $(REPORT_REDACT_BIN) $(REPORT_BUNDLE_BIN) $(REPORT_SUMMARY_BIN) $(TEST_SMI) $(TEST_HIST) $(TEST_REPORT) $(TEST_REPORT_VALIDATOR) $(TEST_REPORT_REDACTOR) $(TEST_REPORT_BUNDLE) $(TEST_REPORT_SUMMARY) $(TEST_API) $(TEST_PROBE) $(TEST_PROBE_POSIX) $(TEST_PROBE_ANDROID) $(TEST_TARGET_SERVICES) $(TEST_PLATFORM) $(TEST_DOCTOR)
 
 .PHONY: all test test-root test-all format-check cppcheck lint lint-extra docs-check clean

@@ -596,6 +596,10 @@ static bool valid_schema_for_type(const std::string& type,
     if (type == "vis_report") {
         return schema_version == VIS_CORE_REPORT_SCHEMA_VERSION;
     }
+    if (type == "vis_probe_report") {
+    return schema_version == VIS_REPORT_SCHEMA_VERSION ||
+               schema_version == VIS_PROBE_REPORT_SCHEMA_VERSION;
+}
     return schema_version == VIS_REPORT_SCHEMA_VERSION;
 }
 
@@ -688,8 +692,11 @@ static void validate_probe_report_semantics(
     extract_direct_json_string(json, sections[2].value_begin,
                                sections[2].value_end, "backend_status",
                                &result->backend_status);
+    std::string selected_backend;
     extract_direct_json_string(json, sections[2].value_begin,
-                               sections[2].value_end, "timer_evidence_level",
+                               sections[2].value_end,
+                               "selected_backend", &selected_backend);
+    extract_direct_json_string(json, sections[2].value_begin, sections[2].value_end, "timer_evidence_level",
                                &result->timer_evidence_level);
     extract_direct_json_string(json, sections[2].value_begin,
                                sections[2].value_end,
@@ -788,6 +795,45 @@ static void validate_probe_report_semantics(
         result->errors.push_back("invalid direct_claim_state: " +
                                  result->direct_claim_state);
     }
+    if (result->schema_version == VIS_PROBE_REPORT_SCHEMA_VERSION &&
+        selected_backend == "target_services_probe") {
+        static const char* kTargetTimerFields[] = {
+            "timer_frequency_hz",       "timer_unit",
+            "timer_counter_width_bits", "timer_wraps",
+            "timer_metadata_status",    "required_capabilities",
+            "available_capabilities",
+        };
+        for (const char* field : kTargetTimerFields) {
+            json_member_t member;
+            if (!find_direct_json_member(json, sections[2].value_begin,
+                                         sections[2].value_end,
+                                         field, &member)) {
+                result->errors.push_back(
+                    std::string("target_timer evidence requires field: "
+                                "probe_result.") +
+                    field);
+            }
+        }
+        std::string metadata_status;
+        if (extract_direct_json_string(
+                json, sections[2].value_begin, sections[2].value_end,
+                "timer_metadata_status", &metadata_status)) {
+            const bool known =
+                metadata_status == "reported_by_target" ||
+                metadata_status == "not_collected";
+            if (!known) {
+                result->errors.push_back(
+                    "invalid target-services timer_metadata_status: " +
+                    metadata_status);
+            }
+            if (result->timer_evidence_level == "target_timer" &&
+                metadata_status != "reported_by_target") {
+                result->errors.push_back(
+                    "target_timer evidence requires reported_by_target "
+                    "metadata");
+            }
+        }
+    }
 
     std::string selected_time_source;
     extract_direct_json_string(json, sections[0].value_begin,
@@ -878,6 +924,7 @@ bool vis_probe_evidence_level_is_valid(const std::string& level) {
            level == "arm_generic_timer_evidence" ||
            level == "contract_only" ||
            level == "rtos_execution_surface" ||
+           level == "partial_target_evidence" ||
            level == "hypervisor_partition_hint";
 }
 
@@ -918,6 +965,10 @@ std::string vis_probe_evidence_level_semantics(const std::string& level) {
     if (level == "rtos_execution_surface") {
         return "Probe recorded target execution-surface evidence, but "
                "timing/isolation claims still depend on the target backend.";
+    }
+    if (level == "partial_target_evidence") {
+        return "Probe collected target timer evidence, but one or more "
+               "execution or privilege surfaces were incomplete.";
     }
     if (level == "hypervisor_partition_hint") {
         return "Probe observed hypervisor or partition-management surfaces, "
@@ -1057,8 +1108,8 @@ bool vis_report_validate_json(const std::string& json,
     if (result->errors.empty() &&
         !valid_schema_for_type(result->report_type,
                                result->schema_version)) {
-        result->errors.push_back(
-            "unsupported schema_version for report type");
+        result->errors.push_back("unsupported schema_version '" + result->schema_version +
+                                 "' for report type '" + result->report_type + "'");
     }
 
     if (result->errors.empty() && is_policy_bundle_type(result->report_type)) {
