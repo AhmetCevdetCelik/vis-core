@@ -246,6 +246,67 @@ static void fill_target_contract(vis_target_contract_t* contract,
                 limitations);
 }
 
+static void fill_claim_gates(vis_claim_gates_t* gates,
+                             const vis_target_contract_t* contract,
+                             const vis_probe_result_t* result) {
+    if (gates == nullptr || contract == nullptr || result == nullptr) return;
+
+    copy_string(gates->hosted_evidence_state,
+                sizeof(gates->hosted_evidence_state),
+                result->backend_status[0] != '\0'
+                        ? "observed_host_runtime"
+                        : "not_observed");
+
+    const bool contract_only =
+        std::strcmp(result->evidence_level, "contract_only") == 0 ||
+        std::strcmp(result->backend_status, "recognized_api_missing") == 0;
+    const bool target_runtime_attested =
+        std::strcmp(result->execution_evidence_level,
+                    "rtos_execution_surface") == 0 ||
+        std::strcmp(result->execution_evidence_level,
+                    "hypervisor_partition_hint") == 0;
+
+    copy_string(gates->target_timer_claim_state,
+                sizeof(gates->target_timer_claim_state),
+                target_runtime_attested
+                    ? "target_attested"
+                    : (contract_only ? "contract_only" : "host_only"));
+    copy_string(gates->target_execution_claim_state,
+                sizeof(gates->target_execution_claim_state),
+                target_runtime_attested
+                    ? "target_attested"
+                    : (contract_only ? "contract_only" : "host_only"));
+    copy_string(gates->temporal_isolation_state,
+                sizeof(gates->temporal_isolation_state),
+                target_runtime_attested
+                    ? "target_attested"
+                    : "supporting_only");
+    copy_string(gates->wcet_state,
+                sizeof(gates->wcet_state),
+                target_runtime_attested
+                    ? "target_attested"
+                    : "supporting_only");
+    copy_string(gates->direct_claim_state,
+                sizeof(gates->direct_claim_state),
+                "target_specific_proof_required");
+
+    if (target_runtime_attested) {
+        copy_string(gates->gate_reason, sizeof(gates->gate_reason),
+                    "Target-specific runtime evidence is present, but direct "
+                    "proof still depends on system-level argumentation.");
+    } else if (contract_only) {
+        copy_string(gates->gate_reason, sizeof(gates->gate_reason),
+                    "Target contract is modeled, but target timer and "
+                    "execution claims remain closed until target APIs are "
+                    "available.");
+    } else {
+        copy_string(gates->gate_reason, sizeof(gates->gate_reason),
+                    "Hosted runtime evidence supports analysis, but target "
+                    "timer, execution, temporal isolation, and WCET claims "
+                    "remain closed.");
+    }
+}
+
 static bool select_platform_candidate(vis_platform_profile_t* profile,
                                       const char* candidate_name,
                                       const char* evidence_level_override,
@@ -590,6 +651,9 @@ static vis_probe_status_t emit_contract_only_stub(
                       "this hosted build does not expose the target runtime "
                       "API needed for partition/scheduler attestation.",
                       &report->platform_profile);
+    fill_claim_gates(&report->claim_gates,
+                     &report->target_contract,
+                     &report->probe_result);
     copy_string(report->platform_profile.claim_level,
                 sizeof(report->platform_profile.claim_level),
                 "contract_only");
@@ -855,6 +919,10 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
         copy_string(report->probe_result.selected_backend,
                     sizeof(report->probe_result.selected_backend),
                     vis_probe_backend_name(active->backend_hint));
+    } else {
+        fill_claim_gates(&report->claim_gates,
+                         &report->target_contract,
+                         &report->probe_result);
     }
     return status;
 }
@@ -916,6 +984,18 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
     std::string target_hypervisor_surface =
         json_escape(t->target_hypervisor_surface);
     std::string target_limitations = json_escape(t->target_limitations);
+    const vis_claim_gates_t* g = &report->claim_gates;
+    std::string hosted_evidence_state =
+        json_escape(g->hosted_evidence_state);
+    std::string target_timer_claim_state =
+        json_escape(g->target_timer_claim_state);
+    std::string target_execution_claim_state =
+        json_escape(g->target_execution_claim_state);
+    std::string temporal_isolation_state =
+        json_escape(g->temporal_isolation_state);
+    std::string wcet_state = json_escape(g->wcet_state);
+    std::string direct_claim_state = json_escape(g->direct_claim_state);
+    std::string gate_reason = json_escape(g->gate_reason);
     std::string execution_environment =
         json_escape(e->execution_environment);
     std::string partition_model = json_escape(e->partition_model);
@@ -1024,6 +1104,15 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
         "      \"target_hypervisor_surface\": \"%s\",\n"
         "      \"target_limitations\": \"%s\"\n"
         "    },\n"
+        "    \"claim_gates\": {\n"
+        "      \"hosted_evidence_state\": \"%s\",\n"
+        "      \"target_timer_claim_state\": \"%s\",\n"
+        "      \"target_execution_claim_state\": \"%s\",\n"
+        "      \"temporal_isolation_state\": \"%s\",\n"
+        "      \"wcet_state\": \"%s\",\n"
+        "      \"direct_claim_state\": \"%s\",\n"
+        "      \"gate_reason\": \"%s\"\n"
+        "    },\n"
         "    \"execution_profile\": {\n"
         "      \"execution_environment\": \"%s\",\n"
         "      \"partition_model\": \"%s\",\n"
@@ -1098,6 +1187,13 @@ char* vis_probe_report_to_json(const vis_probe_report_t* report) {
         target_autosar_adaptive_surface.c_str(),
         target_hypervisor_surface.c_str(),
         target_limitations.c_str(),
+        hosted_evidence_state.c_str(),
+        target_timer_claim_state.c_str(),
+        target_execution_claim_state.c_str(),
+        temporal_isolation_state.c_str(),
+        wcet_state.c_str(),
+        direct_claim_state.c_str(),
+        gate_reason.c_str(),
         execution_environment.c_str(),
         partition_model.c_str(),
         scheduler_surface.c_str(),
@@ -1169,6 +1265,18 @@ void vis_probe_report_print_summary(const vis_probe_report_t* report) {
     std::printf("   Hypervisor  : %s\n", e->hypervisor_surface);
     std::printf("   Affinity    : %s\n", e->affinity_surface);
     std::printf("----------------------------------------\n");
+    std::printf(" Claim gates\n");
+    std::printf("   Hosted evid.: %s\n", report->claim_gates.hosted_evidence_state);
+    std::printf("   Target time : %s\n",
+                report->claim_gates.target_timer_claim_state);
+    std::printf("   Target exec : %s\n",
+                report->claim_gates.target_execution_claim_state);
+    std::printf("   Temp iso    : %s\n",
+                report->claim_gates.temporal_isolation_state);
+    std::printf("   WCET        : %s\n", report->claim_gates.wcet_state);
+    std::printf("   Direct claim: %s\n",
+                report->claim_gates.direct_claim_state);
+    std::printf("----------------------------------------\n");
     std::printf(" Probe result\n");
     std::printf("   Timer evid. : %s\n", r->timer_evidence_level);
     std::printf("   Exec evid.  : %s\n", r->execution_evidence_level);
@@ -1181,5 +1289,6 @@ void vis_probe_report_print_summary(const vis_probe_report_t* report) {
         std::printf("   Unsupported : %s\n", r->unsupported_reason);
     }
     std::printf("   Limitations : %s\n", r->limitations);
+    std::printf("   Gate reason : %s\n", report->claim_gates.gate_reason);
     std::printf("========================================\n\n");
 }

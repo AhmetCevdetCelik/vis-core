@@ -16,6 +16,7 @@ VIS should be able to state:
 - whether the backend is contract-only or active
 - whether any partition window metadata was actually observed
 - whether the timer path is target-runtime evidence or contract-only
+- which claim gates remain closed
 
 ## Minimum PSE53 Contract
 
@@ -25,6 +26,7 @@ VIS should be able to state:
 - whether thread scheduling state was visible
 - whether the report is still host-like or actually target-runtime evidence
 - which claims remain closed due to missing APIs
+- why temporal isolation and WCET remain supporting-only
 
 ## Claim Rules
 

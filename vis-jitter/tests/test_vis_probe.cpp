@@ -209,6 +209,15 @@ int main() {
         std::printf("[test] FAILED: target contract is incomplete.\n");
         return 1;
     }
+    if (empty(auto_report.claim_gates.hosted_evidence_state) ||
+        empty(auto_report.claim_gates.target_timer_claim_state) ||
+        empty(auto_report.claim_gates.target_execution_claim_state) ||
+        empty(auto_report.claim_gates.temporal_isolation_state) ||
+        empty(auto_report.claim_gates.wcet_state) ||
+        empty(auto_report.claim_gates.direct_claim_state)) {
+        std::printf("[test] FAILED: claim gates are incomplete.\n");
+        return 1;
+    }
 
     vis_probe_config_t posix_config{vis_probe_backend_hint_t::POSIX_GENERIC};
     vis_probe_report_t posix_report;
@@ -238,6 +247,15 @@ int main() {
         std::strcmp(posix_report.target_contract.target_runtime_api_status,
                     "host_native") != 0) {
         std::printf("[test] FAILED: hosted target contract is wrong.\n");
+        return 1;
+    }
+    if (std::strcmp(posix_report.claim_gates.target_timer_claim_state,
+                    "host_only") != 0 ||
+        std::strcmp(posix_report.claim_gates.target_execution_claim_state,
+                    "host_only") != 0 ||
+        std::strcmp(posix_report.claim_gates.temporal_isolation_state,
+                    "supporting_only") != 0) {
+        std::printf("[test] FAILED: hosted claim gates are wrong.\n");
         return 1;
     }
 
@@ -420,6 +438,13 @@ int main() {
         std::printf("[test] FAILED: ARINC stub backend contract is wrong.\n");
         return 1;
     }
+    if (std::strcmp(arinc_report.claim_gates.target_timer_claim_state,
+                    "contract_only") != 0 ||
+        std::strcmp(arinc_report.claim_gates.target_execution_claim_state,
+                    "contract_only") != 0) {
+        std::printf("[test] FAILED: ARINC claim gates are wrong.\n");
+        return 1;
+    }
 
     char* json = vis_probe_report_to_json(&posix_report);
     if (json == nullptr || std::strstr(json, "\"vis_probe_report\"") == nullptr ||
@@ -428,7 +453,10 @@ int main() {
         std::strstr(json, "\"backend_status\": \"selected\"") ==
             nullptr ||
         std::strstr(json, "\"target_contract\"") == nullptr ||
+        std::strstr(json, "\"claim_gates\"") == nullptr ||
         std::strstr(json, "\"target_profile_family\": \"hosted_posix\"") ==
+            nullptr ||
+        std::strstr(json, "\"target_timer_claim_state\": \"host_only\"") ==
             nullptr ||
         std::strstr(json, "\"arinc653_surface\"") == nullptr ||
         std::strstr(json, "\"hypervisor_surface\"") == nullptr ||

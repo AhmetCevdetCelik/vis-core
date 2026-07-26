@@ -92,6 +92,47 @@ int main(int argc, char** argv) {
                     vis_probe_target_runtime_api_status_semantics(
                         result.target_runtime_api_status).c_str());
     }
+    if (!result.hosted_evidence_state.empty()) {
+        std::printf("Hosted evidence gate: %s\n",
+                    result.hosted_evidence_state.c_str());
+        std::printf("Hosted gate meaning: %s\n",
+                    vis_probe_hosted_evidence_state_semantics(
+                        result.hosted_evidence_state).c_str());
+    }
+    if (!result.target_timer_claim_state.empty()) {
+        std::printf("Target timer gate: %s\n",
+                    result.target_timer_claim_state.c_str());
+        std::printf("Target timer meaning: %s\n",
+                    vis_probe_target_claim_state_semantics(
+                        result.target_timer_claim_state).c_str());
+    }
+    if (!result.target_execution_claim_state.empty()) {
+        std::printf("Target execution gate: %s\n",
+                    result.target_execution_claim_state.c_str());
+        std::printf("Target execution meaning: %s\n",
+                    vis_probe_target_claim_state_semantics(
+                        result.target_execution_claim_state).c_str());
+    }
+    if (!result.temporal_isolation_state.empty()) {
+        std::printf("Temporal isolation gate: %s\n",
+                    result.temporal_isolation_state.c_str());
+        std::printf("Temporal gate meaning: %s\n",
+                    vis_probe_support_state_semantics(
+                        result.temporal_isolation_state).c_str());
+    }
+    if (!result.wcet_state.empty()) {
+        std::printf("WCET gate: %s\n", result.wcet_state.c_str());
+        std::printf("WCET meaning: %s\n",
+                    vis_probe_support_state_semantics(
+                        result.wcet_state).c_str());
+    }
+    if (!result.direct_claim_state.empty()) {
+        std::printf("Direct claim gate: %s\n",
+                    result.direct_claim_state.c_str());
+        std::printf("Direct claim meaning: %s\n",
+                    vis_probe_direct_claim_state_semantics(
+                        result.direct_claim_state).c_str());
+    }
     if (!result.control_level.empty()) {
         std::printf("Control level: %s\n", result.control_level.c_str());
     }

@@ -7,6 +7,7 @@
  */
 
 #include "../include/report_validator.hpp"
+#include "../include/vis_probe_semantics.hpp"
 
 #include <cstdio>
 #include <fstream>
@@ -111,6 +112,14 @@ int main() {
         "    \"target_contract\": {\n"
         "      \"target_profile_family\": \"hosted_posix\",\n"
         "      \"target_runtime_api_status\": \"host_native\"\n"
+        "    },\n"
+        "    \"claim_gates\": {\n"
+        "      \"hosted_evidence_state\": \"observed_host_runtime\",\n"
+        "      \"target_timer_claim_state\": \"host_only\",\n"
+        "      \"target_execution_claim_state\": \"host_only\",\n"
+        "      \"temporal_isolation_state\": \"supporting_only\",\n"
+        "      \"wcet_state\": \"supporting_only\",\n"
+        "      \"direct_claim_state\": \"target_specific_proof_required\"\n"
         "    },\n"
         "    \"execution_profile\": {\n"
         "      \"execution_environment\": \"posix_user_space\"\n"
@@ -359,7 +368,13 @@ int main() {
         vis_probe_evidence_level_semantics("arm_generic_timer_evidence").find(
             "ARM generic timer") == std::string::npos ||
         vis_probe_evidence_level_semantics("contract_only").find(
-            "target backend contract") == std::string::npos) {
+            "target backend contract") == std::string::npos ||
+        !vis_probe_hosted_evidence_state_is_valid("observed_host_runtime") ||
+        vis_probe_hosted_evidence_state_is_valid("hosted") ||
+        !vis_probe_target_claim_state_is_valid("host_only") ||
+        !vis_probe_support_state_is_valid("supporting_only") ||
+        !vis_probe_direct_claim_state_is_valid(
+            "target_specific_proof_required")) {
         std::fprintf(stderr, "[test] policy evidence semantics are wrong\n");
         return 1;
     }
@@ -376,13 +391,21 @@ int main() {
         "      \"target_profile_family\": \"arinc653\",\n"
         "      \"target_runtime_api_status\": \"recognized_api_missing\"\n"
         "    },\n"
+        "    \"claim_gates\": {\n"
+        "      \"hosted_evidence_state\": \"observed_host_runtime\",\n"
+        "      \"target_timer_claim_state\": \"contract_only\",\n"
+        "      \"target_execution_claim_state\": \"contract_only\",\n"
+        "      \"temporal_isolation_state\": \"supporting_only\",\n"
+        "      \"wcet_state\": \"supporting_only\",\n"
+        "      \"direct_claim_state\": \"target_specific_proof_required\"\n"
+        "    },\n"
         "    \"execution_profile\": {\n"
         "      \"execution_environment\": \"linux_user_space\"\n"
         "    },\n"
         "    \"probe_result\": {\n"
         "      \"selected_backend\": \"arinc653_partition_probe\",\n"
         "      \"backend_status\": \"recognized_api_missing\",\n"
-        "      \"timer_evidence_level\": \"architecture_counter\",\n"
+        "      \"timer_evidence_level\": \"contract_only\",\n"
         "      \"execution_evidence_level\": \"contract_only\"\n"
         "    },\n"
         "    \"evidence_level\": \"contract_only\"\n"
@@ -408,13 +431,21 @@ int main() {
         "      \"target_profile_family\": \"arinc653\",\n"
         "      \"target_runtime_api_status\": \"host_native\"\n"
         "    },\n"
+        "    \"claim_gates\": {\n"
+        "      \"hosted_evidence_state\": \"observed_host_runtime\",\n"
+        "      \"target_timer_claim_state\": \"host_only\",\n"
+        "      \"target_execution_claim_state\": \"contract_only\",\n"
+        "      \"temporal_isolation_state\": \"supporting_only\",\n"
+        "      \"wcet_state\": \"supporting_only\",\n"
+        "      \"direct_claim_state\": \"target_specific_proof_required\"\n"
+        "    },\n"
         "    \"execution_profile\": {\n"
         "      \"execution_environment\": \"linux_user_space\"\n"
         "    },\n"
         "    \"probe_result\": {\n"
         "      \"selected_backend\": \"arinc653_partition_probe\",\n"
         "      \"backend_status\": \"recognized_api_missing\",\n"
-        "      \"timer_evidence_level\": \"architecture_counter\",\n"
+        "      \"timer_evidence_level\": \"contract_only\",\n"
         "      \"execution_evidence_level\": \"contract_only\"\n"
         "    },\n"
         "    \"evidence_level\": \"contract_only\"\n"
@@ -423,6 +454,44 @@ int main() {
     if (vis_report_validate_json(invalid_target_status_probe, &result) ||
         result.errors.empty()) {
         std::fprintf(stderr, "[test] invalid target runtime status was accepted\n");
+        return 1;
+    }
+
+    const std::string invalid_host_gate_probe =
+        "{\n"
+        "  \"vis_probe_report\": {\n"
+        "    \"schema_version\": \"0.1\",\n"
+        "    \"generator\": \"vis-probe 0.1.0\",\n"
+        "    \"platform_profile\": {\n"
+        "      \"selected_time_source\": \"posix_clock_monotonic\"\n"
+        "    },\n"
+        "    \"target_contract\": {\n"
+        "      \"target_profile_family\": \"hosted_posix\",\n"
+        "      \"target_runtime_api_status\": \"host_native\"\n"
+        "    },\n"
+        "    \"claim_gates\": {\n"
+        "      \"hosted_evidence_state\": \"not_observed\",\n"
+        "      \"target_timer_claim_state\": \"host_only\",\n"
+        "      \"target_execution_claim_state\": \"host_only\",\n"
+        "      \"temporal_isolation_state\": \"supporting_only\",\n"
+        "      \"wcet_state\": \"supporting_only\",\n"
+        "      \"direct_claim_state\": \"target_specific_proof_required\"\n"
+        "    },\n"
+        "    \"execution_profile\": {\n"
+        "      \"execution_environment\": \"posix_user_space\"\n"
+        "    },\n"
+        "    \"probe_result\": {\n"
+        "      \"selected_backend\": \"posix_generic\",\n"
+        "      \"backend_status\": \"selected\",\n"
+        "      \"timer_evidence_level\": \"portable\",\n"
+        "      \"execution_evidence_level\": \"portable_user_space\"\n"
+        "    },\n"
+        "    \"evidence_level\": \"portable_user_space\"\n"
+        "  }\n"
+        "}\n";
+    if (vis_report_validate_json(invalid_host_gate_probe, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] invalid hosted evidence gate was accepted\n");
         return 1;
     }
 

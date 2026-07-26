@@ -80,6 +80,15 @@
       "timer_evidence_level": "architecture_counter",
       "execution_evidence_level": "contract_only",
       "unsupported_reason": "target_runtime_api_missing: arinc653_partition_services"
+    },
+    "claim_gates": {
+      "hosted_evidence_state": "observed_host_runtime",
+      "target_timer_claim_state": "contract_only",
+      "target_execution_claim_state": "contract_only",
+      "temporal_isolation_state": "supporting_only",
+      "wcet_state": "supporting_only",
+      "direct_claim_state": "target_specific_proof_required",
+      "gate_reason": "Target contract is modeled, but target timer and execution claims remain closed until target APIs are available."
     }
   }
 }

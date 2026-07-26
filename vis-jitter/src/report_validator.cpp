@@ -639,15 +639,24 @@ static void validate_probe_report_semantics(
     static const char* kTargetFields[] = {
         "target_profile_family", "target_runtime_api_status",
     };
+    static const char* kClaimGateFields[] = {
+        "hosted_evidence_state",
+        "target_timer_claim_state",
+        "target_execution_claim_state",
+        "temporal_isolation_state",
+        "wcet_state",
+        "direct_claim_state",
+    };
     static const required_section_t kSections[] = {
         {"platform_profile", kPlatformFields, 1},
         {"execution_profile", kExecutionFields, 1},
         {"probe_result", kProbeResultFields, 4},
         {"target_contract", kTargetFields, 2},
+        {"claim_gates", kClaimGateFields, 6},
     };
 
-    json_member_t sections[4];
-    for (size_t section_index = 0; section_index < 4; section_index++) {
+    json_member_t sections[5];
+    for (size_t section_index = 0; section_index < 5; section_index++) {
         const required_section_t& required = kSections[section_index];
         if (!find_direct_json_member(json, report.value_begin,
                                      report.value_end, required.name,
@@ -670,7 +679,6 @@ static void validate_probe_report_semantics(
             }
         }
     }
-
     if (!extract_direct_json_string(json, report.value_begin, report.value_end,
                                     "evidence_level",
                                     &result->evidence_level)) {
@@ -694,6 +702,27 @@ static void validate_probe_report_semantics(
                                sections[3].value_end,
                                "target_runtime_api_status",
                                &result->target_runtime_api_status);
+    extract_direct_json_string(json, sections[4].value_begin,
+                               sections[4].value_end, "hosted_evidence_state",
+                               &result->hosted_evidence_state);
+    extract_direct_json_string(json, sections[4].value_begin,
+                               sections[4].value_end,
+                               "target_timer_claim_state",
+                               &result->target_timer_claim_state);
+    extract_direct_json_string(json, sections[4].value_begin,
+                               sections[4].value_end,
+                               "target_execution_claim_state",
+                               &result->target_execution_claim_state);
+    extract_direct_json_string(json, sections[4].value_begin,
+                               sections[4].value_end,
+                               "temporal_isolation_state",
+                               &result->temporal_isolation_state);
+    extract_direct_json_string(json, sections[4].value_begin,
+                               sections[4].value_end, "wcet_state",
+                               &result->wcet_state);
+    extract_direct_json_string(json, sections[4].value_begin,
+                               sections[4].value_end, "direct_claim_state",
+                               &result->direct_claim_state);
 
     if (!vis_probe_evidence_level_is_valid(result->evidence_level)) {
         result->errors.push_back("invalid probe evidence_level: " +
@@ -722,6 +751,42 @@ static void validate_probe_report_semantics(
             result->target_runtime_api_status)) {
         result->errors.push_back("invalid target_runtime_api_status: " +
                                  result->target_runtime_api_status);
+    }
+    if (!result->hosted_evidence_state.empty() &&
+        !vis_probe_hosted_evidence_state_is_valid(
+            result->hosted_evidence_state)) {
+        result->errors.push_back("invalid hosted_evidence_state: " +
+                                 result->hosted_evidence_state);
+    }
+    if (!result->target_timer_claim_state.empty() &&
+        !vis_probe_target_claim_state_is_valid(
+            result->target_timer_claim_state)) {
+        result->errors.push_back("invalid target_timer_claim_state: " +
+                                 result->target_timer_claim_state);
+    }
+    if (!result->target_execution_claim_state.empty() &&
+        !vis_probe_target_claim_state_is_valid(
+            result->target_execution_claim_state)) {
+        result->errors.push_back(
+            "invalid target_execution_claim_state: " +
+            result->target_execution_claim_state);
+    }
+    if (!result->temporal_isolation_state.empty() &&
+        !vis_probe_support_state_is_valid(
+            result->temporal_isolation_state)) {
+        result->errors.push_back("invalid temporal_isolation_state: " +
+                                 result->temporal_isolation_state);
+    }
+    if (!result->wcet_state.empty() &&
+        !vis_probe_support_state_is_valid(result->wcet_state)) {
+        result->errors.push_back("invalid wcet_state: " +
+                                 result->wcet_state);
+    }
+    if (!result->direct_claim_state.empty() &&
+        !vis_probe_direct_claim_state_is_valid(
+            result->direct_claim_state)) {
+        result->errors.push_back("invalid direct_claim_state: " +
+                                 result->direct_claim_state);
     }
 
     std::string selected_time_source;
@@ -762,6 +827,42 @@ static void validate_probe_report_semantics(
         result->warnings.push_back(
             "runtime evidence level is strong, but backend_status is not "
             "selected");
+    }
+
+    if (result->backend_status == "selected" &&
+        result->hosted_evidence_state != "observed_host_runtime") {
+        result->errors.push_back(
+            "selected backend must set hosted_evidence_state=observed_host_runtime");
+    }
+    if (result->evidence_level == "contract_only") {
+        if (result->target_timer_claim_state != "contract_only" ||
+            result->target_execution_claim_state != "contract_only") {
+            result->errors.push_back(
+                "contract_only reports must keep target timer/execution claims closed");
+        }
+    } else if (result->execution_evidence_level == "portable_user_space") {
+        if (result->target_timer_claim_state != "host_only" ||
+            result->target_execution_claim_state != "host_only") {
+            result->errors.push_back(
+                "portable_user_space execution evidence must keep target claims at host_only");
+        }
+    }
+    if (result->execution_evidence_level == "rtos_execution_surface" &&
+        result->target_execution_claim_state != "target_attested") {
+        result->errors.push_back(
+            "rtos_execution_surface requires target_execution_claim_state=target_attested");
+    }
+    if (result->temporal_isolation_state == "target_attested" &&
+        result->execution_evidence_level != "rtos_execution_surface" &&
+        result->execution_evidence_level != "hypervisor_partition_hint") {
+        result->errors.push_back(
+            "temporal_isolation_state=target_attested requires target-specific execution evidence");
+    }
+    if (!result->direct_claim_state.empty() &&
+        result->direct_claim_state != "not_proven" &&
+        result->direct_claim_state != "target_specific_proof_required") {
+        result->errors.push_back(
+            "direct_claim_state has an unexpected value");
     }
 }
 

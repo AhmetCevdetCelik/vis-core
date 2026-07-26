@@ -9,3 +9,6 @@ intended AArch64 generic timer path.
 
 It demonstrates how VIS should describe an ARM path without claiming RTOS
 partition or temporal isolation evidence.
+
+The claim gates keep target timer and execution at `host_only`; the example
+does not claim partition scheduling, target RTOS APIs, or temporal isolation.
