@@ -140,6 +140,88 @@ int main() {
         return 1;
     }
 
+    // Schema 0.1 remains valid even for legacy target-timer shaped reports.
+
+    std::string legacy_target_timer = probe;
+    const std::string portable_timer = "\"timer_evidence_level\": \"portable\"";
+    const size_t timer_level_position = legacy_target_timer.find(portable_timer);
+    if (timer_level_position == std::string::npos) {
+        std::fprintf(stderr, "[test] target timer fixture was not found\n");
+        return 1;
+    }
+    legacy_target_timer.replace(timer_level_position, portable_timer.size(),
+                                "\"timer_evidence_level\": \"target_timer\"");
+    if (!vis_report_validate_json(legacy_target_timer, &result) || !result.errors.empty()) {
+        std::fprintf(stderr, "[test] legacy 0.1 target timer report was rejected\n");
+        return 1;
+    }
+
+    std::string incomplete_target_timer = legacy_target_timer;
+    const size_t schema_position = incomplete_target_timer.find("\"schema_version\": \"0.1\"");
+    const size_t backend_position =
+        incomplete_target_timer.find("\"selected_backend\": \"posix_generic\"");
+    if (schema_position == std::string::npos || backend_position == std::string::npos) {
+        std::fprintf(stderr, "[test] schema 0.2 fixture was not found\n");
+        return 1;
+    }
+    incomplete_target_timer.replace(schema_position,
+                                    std::string("\"schema_version\": \"0.1\"").size(),
+                                    "\"schema_version\": \"0.2\"");
+    incomplete_target_timer.replace(backend_position,
+                                    std::string("\"selected_backend\": \"posix_generic\"").size(),
+                                    "\"selected_backend\": \"target_services_probe\"");
+    if (vis_report_validate_json(incomplete_target_timer, &result) || result.errors.empty()) {
+        std::fprintf(stderr, "[test] schema 0.2 target report without metadata was "
+                             "accepted\n");
+        return 1;
+    }
+
+    std::string complete_target_timer = incomplete_target_timer;
+    const std::string execution_level = "\"execution_evidence_level\": \"portable_user_space\"";
+    const size_t execution_level_position = complete_target_timer.find(execution_level);
+    if (execution_level_position == std::string::npos) {
+        std::fprintf(stderr, "[test] target capability fixture was not found\n");
+        return 1;
+    }
+    complete_target_timer.insert(execution_level_position,
+                                 "\"timer_frequency_hz\": 1000000,\n"
+                                 "      \"timer_unit\": \"ticks\",\n"
+                                 "      \"timer_counter_width_bits\": 32,\n"
+                                 "      \"timer_wraps\": true,\n"
+                                 "      \"timer_metadata_status\": \"reported_by_target\",\n"
+                                 "      \"required_capabilities\": 31,\n"
+                                 "      \"available_capabilities\": 31,\n"
+                                 "      ");
+    if (!vis_report_validate_json(complete_target_timer, &result) || !result.errors.empty()) {
+        std::fprintf(stderr, "[test] complete target timer report was rejected\n");
+        return 1;
+    }
+
+    std::string invalid_metadata_status = complete_target_timer;
+    const std::string reported_status = "\"timer_metadata_status\": \"reported_by_target\"";
+    const size_t metadata_status_position = invalid_metadata_status.find(reported_status);
+    if (metadata_status_position == std::string::npos) {
+        std::fprintf(stderr, "[test] timer metadata status fixture missing\n");
+        return 1;
+    }
+    invalid_metadata_status.replace(metadata_status_position, reported_status.size(),
+                                    "\"timer_metadata_status\": \"unknown_contract_value\"");
+    if (vis_report_validate_json(invalid_metadata_status, &result) || result.errors.empty()) {
+        std::fprintf(stderr, "[test] invalid timer metadata status was accepted\n");
+        return 1;
+    }
+
+    std::string unknown_probe_schema = probe;
+    unknown_probe_schema.replace(unknown_probe_schema.find("\"schema_version\": \"0.1\""),
+                                 std::string("\"schema_version\": \"0.1\"").size(),
+                                 "\"schema_version\": \"9.9\"");
+    if (vis_report_validate_json(unknown_probe_schema, &result) || result.errors.empty() ||
+        result.errors[0].find("9.9") == std::string::npos) {
+        std::fprintf(stderr, "[test] unknown probe schema did not produce a clear "
+                             "error\n");
+        return 1;
+    }
+
     std::string escaped_probe = probe;
     const size_t escaped_level = escaped_probe.rfind("portable_user_space");
     if (escaped_level == std::string::npos) {
@@ -358,6 +440,8 @@ int main() {
         !vis_probe_evidence_level_is_valid("linux_x86_rich_evidence") ||
         !vis_probe_evidence_level_is_valid("arm_generic_timer_evidence") ||
         !vis_probe_evidence_level_is_valid("contract_only") ||
+        !
+        vis_probe_evidence_level_is_valid("partial_target_evidence") ||
         vis_probe_evidence_level_is_valid("portable") ||
         vis_policy_evidence_level_semantics("attested").find("/proc") ==
             std::string::npos ||
@@ -369,6 +453,9 @@ int main() {
             "ARM generic timer") == std::string::npos ||
         vis_probe_evidence_level_semantics("contract_only").find(
             "target backend contract") == std::string::npos ||
+        vis_probe_evidence_level_semantics(
+            "partial_target_evidence").find("incomplete") ==
+            std::string::npos ||
         !vis_probe_hosted_evidence_state_is_valid("observed_host_runtime") ||
         vis_probe_hosted_evidence_state_is_valid("hosted") ||
         !vis_probe_target_claim_state_is_valid("host_only") ||

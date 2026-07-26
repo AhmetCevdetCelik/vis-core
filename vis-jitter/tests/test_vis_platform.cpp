@@ -91,7 +91,8 @@ int main() {
     }
 
     const char* expected_claim = "portable_user_space";
-    if (std::strcmp(profile.selected_time_source, "x86_rdtscp") == 0) {
+    if (std::strcmp(profile.os_family, "linux") == 0 &&
+        std::strcmp(profile.selected_time_source, "x86_rdtscp") == 0) {
         expected_claim = "linux_x86_rich_evidence";
     } else if (std::strcmp(profile.selected_time_source,
                            "arm_cntvct_el0") == 0) {

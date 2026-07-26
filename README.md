@@ -143,8 +143,13 @@ Probe example artifacts:
 Available probe backends today:
 
 - `posix_generic`: portable user-space fallback
-- `linux_x86_rdtscp_msr`: richer Linux/x86 timer evidence
+- `linux_x86_rdtscp_msr`: richer Linux/x86 RDTSCP timer evidence; the probe
+  records the privilege required for optional MSR collection, but does not
+  itself attest MSR/SMI evidence
 - `arm_generic_timer`: AArch64 generic timer evidence
+- `target_services_probe`: versioned generic timer and execution-service
+  collection for injected target adapters; AUTO requires an explicit target
+  profile and falls back only when the target API is missing or unavailable
 - `arinc653_partition_probe`: contract-only stub for partitioned RTOS targets
 - `posix_pse53_probe`: contract-only stub for POSIX PSE53 style targets
 - `autosar_adaptive_probe`: contract-only stub for Adaptive AUTOSAR targets

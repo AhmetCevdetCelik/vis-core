@@ -55,6 +55,60 @@ The current codebase now supports both active backends and contract-only stubs.
 - `posix_generic`
 - `linux_x86_rdtscp_msr`
 - `arm_generic_timer`
+- `target_services_probe`
+
+The `linux_x86_rdtscp_msr` probe backend actively validates the RDTSCP timing
+path. Its name preserves the relationship with the richer Linux/x86
+`vis-jitter` workflow, but selecting it does not mean that `vis-probe` read an
+MSR or collected SMI evidence. MSR/SMI evidence requires the separate
+privileged `vis-jitter` workflow and must be present explicitly in its report.
+
+`target_services_probe` is a vendor-neutral adapter backend. It consumes the
+versioned `vis_probe_services_t` timer, scheduler, partition, privilege, and
+runtime callbacks. Complete collection may emit `rtos_execution_surface`;
+missing or denied execution services emit `partial_target_evidence`. Missing
+timer callbacks or an explicit `UNAVAILABLE` timer API let AUTO fall back.
+Once a target API exists, read failure, invalid timer metadata, non-monotonic
+reads, and adapter-internal errors stop AUTO with
+`VIS_PROBE_ERR_TARGET_SERVICE`; they are not hidden by hosted POSIX evidence.
+The legacy `timer_now` hook remains source-compatible but is not sufficient
+for this backend because it cannot report read failure, frequency, unit,
+counter width, wrap behavior, or privilege requirements.
+
+AUTO considers this backend only when the versioned service struct carries an
+explicit non-`UNSPECIFIED` target profile. Merely injecting a custom hosted
+platform adapter is not target intent. Explicit `TARGET_SERVICES_PROBE`
+selection remains sufficient intent and preserves detailed failures.
+
+The minimal capability model is a bit mask covering timer, scheduler,
+partition, privilege, and runtime services. Timer, scheduler, privilege, and
+runtime are the defaults for generic and PSE53-like profiles. ARINC653-like
+profiles also default to requiring partition evidence. A nonzero
+caller-supplied mask replaces the profile defaults and is the complete
+capability requirement contract. Generic targets never acquire a partition
+requirement implicitly.
+
+Permission denial on a required capability is a fatal target-service error.
+Permission denial on an optional capability keeps the backend result
+available, but lowers the overall claim to partial evidence. Missing optional
+callbacks and explicit `UNAVAILABLE` responses remain
+`not_required_for_profile`.
+
+`VIS_PROBE_VERSION` identifies the probe implementation/API release; it does
+not define the serialized report contract. Probe API 0.2 appends target
+profile/capability fields and timer metadata to the existing structs.
+Target-services reports use report schema `0.2`, while hosted and legacy
+reports remain schema `0.1`. The validator supports both. Timer and capability
+metadata is required only for schema 0.2 target-services reports.
+
+`timer_metadata_status` keeps unknown data separate from invalid data.
+Target adapters use `reported_by_target` only after metadata validation.
+Contract-only or failed target collection uses `not_collected`. POSIX reports
+use `normalized_api_unit`: `ns` describes the normalized API result, not a
+1 GHz hardware counter, and physical width/wrap remain unknown. x86 TSC and
+ARM generic timer reports keep frequency at zero with
+`frequency_not_collected` unless a backend actually reads or validates that
+frequency.
 
 ### Contract-only stubs
 
@@ -87,10 +141,13 @@ Recommended meanings:
 - `portable_user_space`: user-space timing and execution evidence only
 - `linux_x86_rich_evidence`: Linux/x86 architecture counter path is active
 - `arm_generic_timer_evidence`: ARM generic timer path is active
+- `partial_target_evidence`: target timer evidence exists, but one or more
+  services required by the selected target profile are incomplete
 - `contract_only`: target backend contract is recognized, but target runtime API
   is unavailable
-- `rtos_execution_surface`: reserved for future target-specific execution
-  evidence
+- `rtos_execution_surface`: target timer and profile-required execution
+  services were collected; certification and isolation proof remain out of
+  scope
 - `hypervisor_partition_hint`: reserved for future hypervisor/partition surface
   evidence
 

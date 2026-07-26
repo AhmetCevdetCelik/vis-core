@@ -10,6 +10,9 @@
 
 bool vis_probe_backend_status_is_valid(const std::string& status) {
     return status == "selected" ||
+           status == "partial_evidence" ||
+           status == "collection_failed" ||
+           status == "permission_denied" ||
            status == "recognized_api_missing" ||
            status == "not_supported_on_build";
 }
@@ -17,6 +20,7 @@ bool vis_probe_backend_status_is_valid(const std::string& status) {
 bool vis_probe_timer_evidence_level_is_valid(const std::string& level) {
     return level == "portable" ||
            level == "architecture_counter" ||
+           level == "target_timer" ||
            level == "contract_only";
 }
 
@@ -24,12 +28,16 @@ bool vis_probe_execution_evidence_level_is_valid(const std::string& level) {
     return level == "portable_user_space" ||
            level == "contract_only" ||
            level == "rtos_execution_surface" ||
+           level == "partial_rtos_execution_surface" ||
            level == "hypervisor_partition_hint";
 }
 
 bool vis_probe_target_runtime_api_status_is_valid(const std::string& status) {
     return status == "host_native" ||
            status == "recognized_api_missing" ||
+           status == "permission_denied" ||
+           status == "available_collection_failed" ||
+           status == "collection_not_reached" ||
            status == "not_supported_on_build";
 }
 
@@ -67,6 +75,17 @@ std::string vis_probe_backend_status_semantics(const std::string& status) {
     if (status == "selected") {
         return "Backend executed on this host and produced runtime evidence.";
     }
+    if (status == "partial_evidence") {
+        return "Backend collected target evidence, but one or more requested "
+               "runtime surfaces were incomplete.";
+    }
+    if (status == "collection_failed") {
+        return "Backend callbacks were present, but evidence collection "
+               "failed.";
+    }
+    if (status == "permission_denied") {
+        return "Backend collection was denied by the target privilege model.";
+    }
     if (status == "recognized_api_missing") {
         return "Backend contract is recognized, but the target runtime API is "
                "not available on this host.";
@@ -92,6 +111,10 @@ std::string vis_probe_execution_evidence_level_semantics(
         return "Execution surface evidence was observed from a target-specific "
                "RTOS backend.";
     }
+    if (level == "partial_rtos_execution_surface") {
+        return "Only part of the target scheduler, partition, or runtime "
+               "surface was observed.";
+    }
     if (level == "hypervisor_partition_hint") {
         return "Execution evidence reflects partition or hypervisor surface "
                "visibility only.";
@@ -109,6 +132,17 @@ std::string vis_probe_target_runtime_api_status_semantics(
     if (status == "recognized_api_missing") {
         return "The target contract is recognized, but target runtime APIs are "
                "missing on this host.";
+    }
+    if (status == "permission_denied") {
+        return "The target runtime API exists, but the query was denied.";
+    }
+    if (status == "available_collection_failed") {
+        return "The target runtime API exists, but returned invalid or "
+               "incomplete data.";
+    }
+    if (status == "collection_not_reached") {
+        return "An earlier target-service failure prevented the runtime API "
+               "query.";
     }
     if (status == "not_supported_on_build") {
         return "The target contract is not supported by the current build.";
