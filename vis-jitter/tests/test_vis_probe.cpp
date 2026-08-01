@@ -462,6 +462,32 @@ int main() {
         return 1;
     }
 
+    char capacity_names[7][32];
+    for (int i = 0; i < 7; i++) {
+        std::snprintf(capacity_names[i], sizeof(capacity_names[i]),
+                      "capacity_target_%d", i);
+        const vis_probe_backend_descriptor_t capacity_backend{
+            static_cast<vis_probe_backend_hint_t>(200 + i), capacity_names[i], false,
+            run_test_backend};
+        if (!vis_probe_register_backend(&capacity_backend)) {
+            std::printf("[test] FAILED: backend registry rejected a valid capacity entry.\n");
+            return 1;
+        }
+    }
+    uint32_t capacity_count = 0;
+    vis_probe_backend_registry(&capacity_count);
+    if (capacity_count != 24) {
+        std::printf("[test] FAILED: backend registry capacity is wrong.\n");
+        return 1;
+    }
+    const vis_probe_backend_descriptor_t overflow_backend{
+        static_cast<vis_probe_backend_hint_t>(207), "capacity_overflow", false,
+        run_test_backend};
+    if (vis_probe_register_backend(&overflow_backend)) {
+        std::printf("[test] FAILED: backend registry accepted an overflow entry.\n");
+        return 1;
+    }
+
     char* json = vis_probe_report_to_json(&posix_report);
     if (json == nullptr || std::strstr(json, "\"vis_probe_report\"") == nullptr ||
         std::strstr(json, "\"evidence_level\": \"portable_user_space\"") ==
