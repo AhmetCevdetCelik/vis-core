@@ -718,6 +718,15 @@ static bool target_timer_reads_forward(uint64_t first, uint64_t second,
     return delta <= (modulus >> 1);
 }
 
+static bool target_timer_unit_is_absolute(const char* unit) {
+    if (unit == nullptr) return false;
+    return std::strcmp(unit, "ns") == 0 || std::strcmp(unit, "us") == 0 ||
+           std::strcmp(unit, "ms") == 0 || std::strcmp(unit, "s") == 0 ||
+           std::strcmp(unit, "nanoseconds") == 0 ||
+           std::strcmp(unit, "microseconds") == 0 ||
+           std::strcmp(unit, "milliseconds") == 0 || std::strcmp(unit, "seconds") == 0;
+}
+
 static vis_probe_status_t run_target_services_backend(const vis_probe_services_t* services,
                                                       vis_probe_report_t* report) {
     if (report == nullptr)
@@ -774,7 +783,8 @@ static vis_probe_status_t run_target_services_backend(const vis_probe_services_t
                 : "collection_failed",
             "Target timer metadata collection failed.", issue);
     }
-    if (timer.name[0] == '\0' || (timer.frequency_hz == 0 && timer.unit[0] == '\0') ||
+    if (timer.name[0] == '\0' ||
+        (timer.frequency_hz == 0 && !target_timer_unit_is_absolute(timer.unit)) ||
         timer.counter_width_bits == 0 || timer.counter_width_bits > 64 ||
         timer.privilege_requirement[0] == '\0' || !timer.monotonic) {
         return fail_target_services_backend(
@@ -920,14 +930,25 @@ static vis_probe_status_t run_target_services_backend(const vis_probe_services_t
     } else if (runtime_status == static_cast<int>(vis_probe_service_status_t::PERMISSION_DENIED)) {
         runtime_api_status = "permission_denied";
     }
+    const char* scheduler_model =
+        scheduler_status == ok
+            ? scheduler
+            : ((required & VIS_PROBE_TARGET_CAP_SCHEDULER) == 0
+                   ? "not_required_for_profile"
+                   : "query_incomplete");
+    const char* privilege_model =
+        privilege_status == ok
+            ? privilege
+            : ((required & VIS_PROBE_TARGET_CAP_PRIVILEGE) == 0
+                   ? "not_required_for_profile"
+                   : timer.privilege_requirement);
     fill_target_contract(
-        &report->target_contract, profile_name, timer.name,
-        scheduler_status == ok ? scheduler : "query_incomplete",
+        &report->target_contract, profile_name, timer.name, scheduler_model,
         partition_status == ok
             ? partition
             : ((required & VIS_PROBE_TARGET_CAP_PARTITION) == 0 ? "not_required_for_profile"
                                                                 : "query_incomplete"),
-        privilege_status == ok ? privilege : timer.privilege_requirement, runtime_api_status,
+        privilege_model, runtime_api_status,
         "not_claimed", "not_claimed", "not_claimed", "not_claimed",
         collection_complete ? "Target timer and execution services were collected."
                             : "Target timer was collected, but one or more execution "
@@ -1173,7 +1194,8 @@ static vis_probe_status_t run_hypervisor_partition_backend(
         "hypervisor_partition_isolation_not_attested");
 }
 
-static vis_probe_backend_descriptor_t backend_descriptors[16] = {
+static constexpr uint32_t max_backend_descriptors = 24;
+static vis_probe_backend_descriptor_t backend_descriptors[max_backend_descriptors] = {
     {vis_probe_backend_hint_t::TARGET_SERVICES_PROBE, "target_services_probe", true,
      run_target_services_backend},
     {vis_probe_backend_hint_t::LINUX_X86_RDTSCP_MSR,
@@ -1192,7 +1214,6 @@ static vis_probe_backend_descriptor_t backend_descriptors[16] = {
      "hypervisor_partition_probe", false, run_hypervisor_partition_backend},
 };
 static uint32_t backend_descriptor_count = 8;
-static constexpr uint32_t max_backend_descriptors = 24;
 static constexpr size_t max_backend_name_size = 128;
 static char owned_backend_names[max_backend_descriptors]
                                [max_backend_name_size] = {};

@@ -22,6 +22,8 @@ struct fake_target_t {
     int runtime_status = static_cast<int>(vis_probe_service_status_t::OK);
     bool timer_monotonic = true;
     uint32_t timer_width_bits = 32;
+    uint64_t timer_frequency_hz = 1000000;
+    const char* timer_unit = "ticks";
     uint64_t timer_values[2] = {100, 101};
     uint32_t timer_read_index = 0;
     const char* scheduler = "fixed_priority";
@@ -68,8 +70,8 @@ static int fake_query_timer(void* opaque, vis_probe_timer_info_t* info) {
     }
     std::memset(info, 0, sizeof(*info));
     std::snprintf(info->name, sizeof(info->name), "fake_counter");
-    info->frequency_hz = 1000000;
-    std::snprintf(info->unit, sizeof(info->unit), "ticks");
+    info->frequency_hz = target->timer_frequency_hz;
+    std::snprintf(info->unit, sizeof(info->unit), "%s", target->timer_unit);
     info->counter_width_bits = target->timer_width_bits;
     info->monotonic = target->timer_monotonic;
     info->wraps = true;
@@ -365,7 +367,21 @@ int main() {
         return 1;
     }
 
-    // 13. Partial target data never opens the strong target claim.
+    // 13. Zero-frequency metadata must use an absolute time unit.
+    fake_target_t zero_frequency_ticks;
+    zero_frequency_ticks.timer_frequency_hz = 0;
+    vis_probe_services_t zero_frequency_ticks_services =
+        make_services(&zero_frequency_ticks, &adapter);
+    config.services = &zero_frequency_ticks_services;
+    status = vis_probe_run(&config, &report);
+    if (require(status == vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE &&
+                    contains(report.probe_result.unsupported_reason,
+                             "invalid_timer_metadata"),
+                "zero-frequency tick metadata was accepted")) {
+        return 1;
+    }
+
+    // 14. Partial target data never opens the strong target claim.
     config.services = &missing_partition_services;
     status = vis_probe_run(&config, &report);
     if (require(status == vis_probe_status_t::VIS_PROBE_OK &&
@@ -377,7 +393,7 @@ int main() {
         return 1;
     }
 
-    // 14. Partition is not required for a PSE53-like target.
+    // 15. Partition is not required for a PSE53-like target.
     fake_target_t pse53;
     pse53.partition_status = static_cast<int>(vis_probe_service_status_t::UNAVAILABLE);
     vis_probe_services_t pse53_services = make_services(&pse53, &adapter);
@@ -396,7 +412,7 @@ int main() {
         return 1;
     }
 
-    // 15. Partition remains required for an ARINC653-like target.
+    // 16. Partition remains required for an ARINC653-like target.
     fake_target_t arinc653;
     arinc653.partition_status = static_cast<int>(vis_probe_service_status_t::UNAVAILABLE);
     vis_probe_services_t arinc653_services = make_services(&arinc653, &adapter);
@@ -414,7 +430,7 @@ int main() {
         return 1;
     }
 
-    // 16. Generic defaults do not require partition evidence.
+    // 17. Generic defaults do not require partition evidence.
     fake_target_t generic_default;
     generic_default.partition_status = static_cast<int>(vis_probe_service_status_t::UNAVAILABLE);
     vis_probe_services_t generic_default_services = make_services(&generic_default, &adapter);
@@ -430,15 +446,16 @@ int main() {
         return 1;
     }
 
-    // 17. An explicit mask replaces profile defaults.
+    // 18. An explicit mask replaces profile defaults.
     fake_target_t explicit_mask;
     explicit_mask.partition_status = static_cast<int>(vis_probe_service_status_t::UNAVAILABLE);
     explicit_mask.privilege_status =
         static_cast<int>(vis_probe_service_status_t::PERMISSION_DENIED);
     vis_probe_services_t explicit_mask_services = make_services(&explicit_mask, &adapter);
     const uint32_t explicit_requirements =
-        VIS_PROBE_TARGET_CAP_TIMER | VIS_PROBE_TARGET_CAP_SCHEDULER | VIS_PROBE_TARGET_CAP_RUNTIME;
+        VIS_PROBE_TARGET_CAP_TIMER | VIS_PROBE_TARGET_CAP_RUNTIME;
     explicit_mask_services.required_capabilities = explicit_requirements;
+    explicit_mask_services.query_scheduler = nullptr;
     config.services = &explicit_mask_services;
     status = vis_probe_run(&config, &report);
     if (require(status == vis_probe_status_t::VIS_PROBE_OK &&
@@ -446,12 +463,16 @@ int main() {
                     std::strcmp(report.probe_result.backend_status, "partial_evidence") == 0 &&
                     contains(report.probe_result.unsupported_reason,
                              "permission_denied: query_privilege") &&
-                    !contains(report.probe_result.unsupported_reason, "query_partition"),
+                    !contains(report.probe_result.unsupported_reason, "query_partition") &&
+                    std::strcmp(report.target_contract.target_scheduler_model,
+                                "not_required_for_profile") == 0 &&
+                    std::strcmp(report.target_contract.target_privilege_model,
+                                "not_required_for_profile") == 0,
                 "explicit capability mask precedence is wrong")) {
         return 1;
     }
 
-    // 18. A hosted custom platform adapter alone is not target intent.
+    // 19. A hosted custom platform adapter alone is not target intent.
     fake_target_t hosted_adapter_only;
     hosted_adapter_only.timer_read_status =
         static_cast<int>(vis_probe_service_status_t::READ_FAILED);
