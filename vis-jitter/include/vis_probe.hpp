@@ -178,6 +178,8 @@ struct vis_probe_services_t {
     vis_probe_target_profile_t target_profile = vis_probe_target_profile_t::UNSPECIFIED;
     // Zero selects the default requirement set for target_profile. A nonzero
     // mask is the complete requirement contract and replaces those defaults.
+    // TIMER remains mandatory because target-services reports are anchored by
+    // validated target timer metadata and reads.
     uint32_t required_capabilities = 0;
 };
 

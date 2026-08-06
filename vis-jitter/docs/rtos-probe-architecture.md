@@ -85,8 +85,9 @@ partition, privilege, and runtime services. Timer, scheduler, privilege, and
 runtime are the defaults for generic and PSE53-like profiles. ARINC653-like
 profiles also default to requiring partition evidence. A nonzero
 caller-supplied mask replaces the profile defaults and is the complete
-capability requirement contract. Generic targets never acquire a partition
-requirement implicitly.
+capability requirement contract, but it must still include `TIMER` because
+target-services reports are anchored by validated target timer metadata and
+reads. Generic targets never acquire a partition requirement implicitly.
 
 Permission denial on a required capability is a fatal target-service error.
 Permission denial on an optional capability keeps the backend result
