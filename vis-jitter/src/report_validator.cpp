@@ -12,7 +12,9 @@
 #include "../include/vis_probe_semantics.hpp"
 
 #include <cctype>
+#include <cstdint>
 #include <fstream>
+#include <limits>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -347,6 +349,7 @@ static bool json_has_field(const std::string& json,
 enum class json_value_type_t {
     string,
     object,
+    number,
     other,
 };
 
@@ -460,6 +463,7 @@ static bool find_direct_json_member(const std::string& json,
                 return false;
             }
         } else {
+            current.type = json_value_type_t::number;
             current.value_end = json.find_first_of(",}", value);
             if (current.value_end == std::string::npos ||
                 current.value_end > object_end) {
@@ -475,6 +479,42 @@ static bool find_direct_json_member(const std::string& json,
         i = current.value_end + 1;
     }
     return false;
+}
+
+static bool extract_direct_json_uint32(const std::string& json,
+                                       size_t object_begin,
+                                       size_t object_end,
+                                       const std::string& field,
+                                       uint32_t* value) {
+    json_member_t member;
+    if (!find_direct_json_member(json, object_begin, object_end, field,
+                                 &member) ||
+        member.type != json_value_type_t::number) {
+        return false;
+    }
+
+    size_t begin = member.value_begin;
+    size_t end = member.value_end + 1;
+    while (begin < end && std::isspace(static_cast<unsigned char>(json[begin]))) {
+        begin++;
+    }
+    while (end > begin && std::isspace(static_cast<unsigned char>(json[end - 1]))) {
+        end--;
+    }
+    if (begin == end) return false;
+
+    uint32_t parsed = 0;
+    for (size_t i = begin; i < end; i++) {
+        const unsigned char digit = static_cast<unsigned char>(json[i]);
+        if (!std::isdigit(digit)) return false;
+        const uint32_t digit_value = static_cast<uint32_t>(digit - '0');
+        if (parsed > (std::numeric_limits<uint32_t>::max() - digit_value) / 10) {
+            return false;
+        }
+        parsed = parsed * 10 + digit_value;
+    }
+    if (value != nullptr) *value = static_cast<uint32_t>(parsed);
+    return true;
 }
 
 static bool extract_direct_json_string(const std::string& json,
@@ -814,6 +854,50 @@ static void validate_probe_report_semantics(
                     field);
             }
         }
+        uint32_t required_capabilities = 0;
+        uint32_t available_capabilities = 0;
+        const bool required_capabilities_valid =
+            extract_direct_json_uint32(
+                json, sections[2].value_begin, sections[2].value_end,
+                "required_capabilities", &required_capabilities);
+        const bool available_capabilities_valid =
+            extract_direct_json_uint32(
+                json, sections[2].value_begin, sections[2].value_end,
+                "available_capabilities", &available_capabilities);
+        if (!required_capabilities_valid) {
+            result->errors.push_back(
+                "target-services required_capabilities must be an unsigned "
+                "32-bit integer");
+        }
+        if (!available_capabilities_valid) {
+            result->errors.push_back(
+                "target-services available_capabilities must be an unsigned "
+                "32-bit integer");
+        }
+        if (required_capabilities_valid && available_capabilities_valid) {
+            constexpr uint32_t known_capabilities =
+                1u << 0 | 1u << 1 | 1u << 2 | 1u << 3 | 1u << 4;
+            if ((required_capabilities & ~known_capabilities) != 0) {
+                result->errors.push_back(
+                    "target-services required_capabilities contains unknown bits");
+            }
+            if ((available_capabilities & ~known_capabilities) != 0) {
+                result->errors.push_back(
+                    "target-services available_capabilities contains unknown bits");
+            }
+            if (result->backend_status == "selected" &&
+                (available_capabilities & required_capabilities) !=
+                    required_capabilities) {
+                result->errors.push_back(
+                    "target-services available_capabilities does not satisfy "
+                    "required_capabilities for a selected backend");
+            }
+            if (required_capabilities != 0 &&
+                (required_capabilities & (1u << 0)) == 0) {
+                result->errors.push_back(
+                    "target-services required_capabilities must include TIMER");
+            }
+        }
         std::string metadata_status;
         if (extract_direct_json_string(
                 json, sections[2].value_begin, sections[2].value_end,
@@ -861,9 +945,8 @@ static void validate_probe_report_semantics(
     }
     if (result->execution_evidence_level == "rtos_execution_surface" &&
         result->target_runtime_api_status != "host_native") {
-        result->warnings.push_back(
-            "rtos_execution_surface should usually require a host_native "
-            "target runtime API status");
+        result->errors.push_back(
+            "rtos_execution_surface requires a host_native target runtime API status");
     }
     if ((result->evidence_level == "linux_x86_rich_evidence" ||
          result->evidence_level == "arm_generic_timer_evidence" ||
@@ -875,10 +958,22 @@ static void validate_probe_report_semantics(
             "selected");
     }
 
-    if (result->backend_status == "selected" &&
+    if (result->evidence_level == "partial_target_evidence" &&
+        result->backend_status == "selected") {
+        result->errors.push_back(
+            "partial_target_evidence cannot claim backend_status selected");
+    }
+
+    const bool hosted_backend =
+        selected_backend == "posix_generic" ||
+        selected_backend == "linux_x86_rdtscp_msr" ||
+        selected_backend == "arm_generic_timer";
+
+    if (hosted_backend && result->backend_status == "selected" &&
         result->hosted_evidence_state != "observed_host_runtime") {
         result->errors.push_back(
-            "selected backend must set hosted_evidence_state=observed_host_runtime");
+            "selected hosted backend must set "
+            "hosted_evidence_state=observed_host_runtime");
     }
     if (result->evidence_level == "contract_only") {
         if (result->target_timer_claim_state != "contract_only" ||
@@ -903,6 +998,11 @@ static void validate_probe_report_semantics(
         result->execution_evidence_level != "hypervisor_partition_hint") {
         result->errors.push_back(
             "temporal_isolation_state=target_attested requires target-specific execution evidence");
+    }
+    if (result->temporal_isolation_state == "target_attested" ||
+        result->wcet_state == "target_attested") {
+        result->errors.push_back(
+            "current probe evidence cannot directly attest temporal isolation or WCET");
     }
     if (!result->direct_claim_state.empty() &&
         result->direct_claim_state != "not_proven" &&

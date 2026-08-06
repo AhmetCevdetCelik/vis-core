@@ -189,6 +189,12 @@ int main() {
                 std::strcmp(report.probe_result.evidence_level, "rtos_execution_surface") == 0 &&
                 std::strcmp(report.probe_result.execution_evidence_level,
                             "rtos_execution_surface") == 0 &&
+                std::strcmp(report.claim_gates.hosted_evidence_state,
+                            "not_observed") == 0 &&
+                std::strcmp(report.claim_gates.temporal_isolation_state,
+                            "supporting_only") == 0 &&
+                std::strcmp(report.claim_gates.wcet_state,
+                            "supporting_only") == 0 &&
                 report.probe_result.timer_frequency_hz == 1000000 &&
                 std::strcmp(report.probe_result.timer_unit, "ticks") == 0 &&
                 report.probe_result.timer_counter_width_bits == 32 &&
@@ -213,6 +219,7 @@ int main() {
             status == vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE &&
                 std::strcmp(report.probe_result.backend_status, "recognized_api_missing") == 0 &&
                 contains(report.probe_result.unsupported_reason, "callback_missing: timer_read") &&
+                std::strcmp(report.claim_gates.hosted_evidence_state, "not_observed") == 0 &&
                 serialized_report_is_valid(&report, "\"timer_metadata_status\": \"not_collected\""),
             "missing timer callback was not distinguished")) {
         return 1;
@@ -472,7 +479,21 @@ int main() {
         return 1;
     }
 
-    // 19. A hosted custom platform adapter alone is not target intent.
+    // 19. Timer remains mandatory for the timer-anchored target report.
+    vis_probe_services_t missing_required_timer = make_services(&explicit_mask, &adapter);
+    missing_required_timer.required_capabilities = VIS_PROBE_TARGET_CAP_RUNTIME;
+    config.services = &missing_required_timer;
+    status = vis_probe_run(&config, &report);
+    if (require(
+            status == vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE &&
+                std::strcmp(report.probe_result.backend_status, "collection_failed") == 0 &&
+                contains(report.probe_result.unsupported_reason,
+                         "required_capability_missing: timer"),
+            "explicit capability mask without TIMER was accepted")) {
+        return 1;
+    }
+
+    // 20. A hosted custom platform adapter alone is not target intent.
     fake_target_t hosted_adapter_only;
     hosted_adapter_only.timer_read_status =
         static_cast<int>(vis_probe_service_status_t::READ_FAILED);

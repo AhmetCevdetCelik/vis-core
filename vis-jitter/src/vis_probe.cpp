@@ -247,14 +247,27 @@ static void fill_target_contract(vis_target_contract_t* contract,
                 limitations);
 }
 
+static bool hosted_platform_evidence_observed(
+    const vis_platform_profile_t* platform) {
+    if (platform == nullptr || platform->selected_time_source[0] == '\0' ||
+        !platform->time_source_monotonic) {
+        return false;
+    }
+    return std::strcmp(platform->os_family, "linux") == 0 ||
+           std::strcmp(platform->os_family, "posix") == 0 ||
+           std::strcmp(platform->os_family, "android") == 0 ||
+           std::strcmp(platform->environment, "linux_container") == 0;
+}
+
 static void fill_claim_gates(vis_claim_gates_t* gates,
                              const vis_target_contract_t* contract,
-                             const vis_probe_result_t* result) {
+                             const vis_probe_result_t* result,
+                             const vis_platform_profile_t* platform) {
     if (gates == nullptr || contract == nullptr || result == nullptr) return;
 
     copy_string(gates->hosted_evidence_state,
                 sizeof(gates->hosted_evidence_state),
-                result->backend_status[0] != '\0'
+                hosted_platform_evidence_observed(platform)
                         ? "observed_host_runtime"
                         : "not_observed");
 
@@ -279,14 +292,10 @@ static void fill_claim_gates(vis_claim_gates_t* gates,
                     : (contract_only ? "contract_only" : "host_only"));
     copy_string(gates->temporal_isolation_state,
                 sizeof(gates->temporal_isolation_state),
-                target_runtime_attested
-                    ? "target_attested"
-                    : "supporting_only");
+                "supporting_only");
     copy_string(gates->wcet_state,
                 sizeof(gates->wcet_state),
-                target_runtime_attested
-                    ? "target_attested"
-                    : "supporting_only");
+                "supporting_only");
     copy_string(gates->direct_claim_state,
                 sizeof(gates->direct_claim_state),
                 "target_specific_proof_required");
@@ -752,6 +761,16 @@ static vis_probe_status_t run_target_services_backend(const vis_probe_services_t
             "collection_failed", "The required target capability mask contains unknown bits.",
             "invalid_required_capability_mask");
     }
+    if (target_services_profile_fields_available(services) &&
+        services->required_capabilities != 0 &&
+        (required & VIS_PROBE_TARGET_CAP_TIMER) == 0) {
+        return fail_target_services_backend(
+            report, vis_probe_status_t::VIS_PROBE_ERR_TARGET_SERVICE, profile_name, required,
+            "collection_failed",
+            "The target-services capability mask must include TIMER because "
+            "target reports are timer-anchored.",
+            "required_capability_missing: timer");
+    }
     if (!target_services_v1_available(services)) {
         return fail_target_services_backend(
             report, vis_probe_status_t::VIS_PROBE_ERR_BACKEND_UNAVAILABLE, profile_name, required,
@@ -1103,7 +1122,8 @@ static vis_probe_status_t emit_contract_only_stub(
                       &report->platform_profile);
     fill_claim_gates(&report->claim_gates,
                      &report->target_contract,
-                     &report->probe_result);
+                     &report->probe_result,
+                     &report->platform_profile);
     copy_string(report->platform_profile.claim_level,
                 sizeof(report->platform_profile.claim_level),
                 "contract_only");
@@ -1381,7 +1401,8 @@ vis_probe_status_t vis_probe_run(const vis_probe_config_t* config,
     } else {
         fill_claim_gates(&report->claim_gates,
                          &report->target_contract,
-                         &report->probe_result);
+                         &report->probe_result,
+                         &report->platform_profile);
     }
     return status;
 }

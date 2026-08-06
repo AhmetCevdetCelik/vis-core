@@ -197,6 +197,61 @@ int main() {
         return 1;
     }
 
+    std::string incomplete_capabilities = complete_target_timer;
+    const std::string available_all = "\"available_capabilities\": 31";
+    const size_t available_all_position = incomplete_capabilities.find(available_all);
+    if (available_all_position == std::string::npos) {
+        std::fprintf(stderr, "[test] capability fixture was not found\n");
+        return 1;
+    }
+    incomplete_capabilities.replace(available_all_position, available_all.size(),
+                                    "\"available_capabilities\": 1");
+    if (vis_report_validate_json(incomplete_capabilities, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] incomplete capability mask was accepted\n");
+        return 1;
+    }
+
+    std::string unknown_capability = complete_target_timer;
+    const std::string required_all = "\"required_capabilities\": 31";
+    const size_t required_all_position = unknown_capability.find(required_all);
+    if (required_all_position == std::string::npos) {
+        std::fprintf(stderr, "[test] required capability fixture was not found\n");
+        return 1;
+    }
+    unknown_capability.replace(required_all_position, required_all.size(),
+                               "\"required_capabilities\": 63");
+    if (vis_report_validate_json(unknown_capability, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] unknown capability bit was accepted\n");
+        return 1;
+    }
+
+    std::string non_numeric_capability = complete_target_timer;
+    non_numeric_capability.replace(required_all_position, required_all.size(),
+                                   "\"required_capabilities\": \"31\"");
+    if (vis_report_validate_json(non_numeric_capability, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] non-numeric capability was accepted\n");
+        return 1;
+    }
+
+    std::string overclaimed_target_surface = complete_target_timer;
+    const std::string supporting_only = "\"temporal_isolation_state\": \"supporting_only\"";
+    const size_t supporting_only_position = overclaimed_target_surface.find(supporting_only);
+    if (supporting_only_position == std::string::npos) {
+        std::fprintf(stderr, "[test] claim gate fixture was not found\n");
+        return 1;
+    }
+    overclaimed_target_surface.replace(
+        supporting_only_position, supporting_only.size(),
+        "\"temporal_isolation_state\": \"target_attested\"");
+    if (vis_report_validate_json(overclaimed_target_surface, &result) ||
+        result.errors.empty()) {
+        std::fprintf(stderr, "[test] overclaimed temporal isolation was accepted\n");
+        return 1;
+    }
+
     std::string invalid_metadata_status = complete_target_timer;
     const std::string reported_status = "\"timer_metadata_status\": \"reported_by_target\"";
     const size_t metadata_status_position = invalid_metadata_status.find(reported_status);
